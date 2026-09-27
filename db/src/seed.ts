@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { connect } from 'node:net';
 import { parseArgs } from 'node:util';
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import pg from 'pg';
@@ -38,6 +39,9 @@ const weighted = <T>(pairs: [T, number][]): T => {
 const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000);
 const ltreeLabel = (id: string) => id.replaceAll('-', '');
 
+// Untyped on purpose: the seed inserts into tables by name, and this package does not depend on
+// @tb/platform, where the table types live.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = new Kysely<any>({
   dialect: new PostgresDialect({ pool: new pg.Pool({ connectionString: ownerDatabaseUrl(), max: 4 }) }),
 });
@@ -180,6 +184,7 @@ async function seed(): Promise<void> {
     const steps = makeSteps(rand, leaf.path, behaviour);
     const id = randomUUID();
     const updated = daysAgo(Math.floor(rand() * 200));
+    const created = daysAgo(220 + Math.floor(rand() * 180));
 
     caseRows.push({
       id,
@@ -219,7 +224,7 @@ async function seed(): Promise<void> {
       ]),
       current_version: versions,
       created_by: pick(owners).id,
-      created_at: daysAgo(400),
+      created_at: created,
       updated_at: updated,
     });
     // Older versions differ slightly (one fewer step, older wording), so the version diff has something to show.
@@ -236,7 +241,8 @@ async function seed(): Promise<void> {
         steps: JSON.stringify(isCurrent ? steps : steps.slice(0, Math.max(2, steps.length - 1))),
         note: v === 1 ? 'Created' : 'Updated expected results after review',
         author_id: pick(owners).id,
-        created_at: daysAgo(400 - v * 30),
+        // v1 on creation, the current version at the last update, anything between spread evenly.
+        created_at: new Date(created.getTime() + ((updated.getTime() - created.getTime()) * (v - 1)) / Math.max(1, versions - 1)),
       });
     }
     cases.push({ id, keyNo: 10001 + i, leafPath: leaf.path, labels, steps, version: versions, title });
@@ -384,8 +390,29 @@ async function seedRuns(
   }
 }
 
+/**
+ * Reseeding gives every user a new id, but the API caches identities in Valkey for five minutes;
+ * stale entries would point at users that no longer exist. One FLUSHDB over a raw socket clears them
+ * without pulling a Redis client into this package.
+ */
+async function flushIdentityCache(): Promise<void> {
+  const url = process.env.VALKEY_URL;
+  if (!url) return;
+  const { hostname, port } = new URL(url);
+  await new Promise<void>((resolve) => {
+    const socket = connect(Number(port || 6379), hostname, () => socket.write('*1\r\n$7\r\nFLUSHDB\r\n'));
+    socket.once('data', () => socket.end());
+    socket.once('close', () => resolve());
+    socket.once('error', () => {
+      console.warn('could not reach Valkey to clear cached identities; restart core-api if sign-in misbehaves');
+      resolve();
+    });
+  });
+}
+
 try {
   await seed();
+  await flushIdentityCache();
 } finally {
   await db.destroy();
 }

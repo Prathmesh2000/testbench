@@ -71,6 +71,7 @@ describe('keyset pagination', () => {
     status: 'ready',
     updated_at: new Date('2026-09-27T10:00:00Z'),
     module_path: 'a.b',
+    last_result: 'passed',
   };
 
   it('encodes the sort value and id of the last row', () => {

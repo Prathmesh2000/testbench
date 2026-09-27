@@ -67,6 +67,7 @@ const SORT_COLUMNS: Record<CaseSort, { column: string; cast: string }> = {
   updated: { column: 'c.updated_at', cast: 'timestamptz' },
   // Tree order: children follow their parent, so grouping by module yields contiguous groups.
   module: { column: 'm.path', cast: 'ltree' },
+  lastResult: { column: 'c.last_result', cast: 'text' },
 };
 
 export interface SortSpec {
@@ -99,6 +100,7 @@ export function cursorAfter(
     status: string;
     updated_at: Date;
     module_path: string;
+    last_result: string;
   },
 ): string {
   const value: CursorValue = {
@@ -108,6 +110,7 @@ export function cursorAfter(
     status: row.status,
     updated: row.updated_at.toISOString(),
     module: row.module_path,
+    lastResult: row.last_result,
   }[sort];
   return encodeCursor([value, row.id]);
 }

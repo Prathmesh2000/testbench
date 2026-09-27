@@ -55,7 +55,7 @@ export const CaseFilter = z.object({
 });
 export type CaseFilter = z.infer<typeof CaseFilter>;
 
-export const CASE_SORTS = ['key', 'title', 'priority', 'updated', 'status', 'module'] as const;
+export const CASE_SORTS = ['key', 'title', 'priority', 'updated', 'status', 'module', 'lastResult'] as const;
 export type CaseSort = (typeof CASE_SORTS)[number];
 
 export const CaseListQuery = z.object({
@@ -249,6 +249,8 @@ export interface ModuleNode {
   id: string;
   parentId: string | null;
   name: string;
+  /** Order among siblings, as arranged by the team. */
+  position: number;
   total: number;
   failing: number;
 }

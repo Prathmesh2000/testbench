@@ -193,6 +193,8 @@ export async function startHarness(): Promise<Harness> {
 }
 
 /** inject() wrapper: JSON in, JSON out, with the caller's bearer token. */
+// Defaults to `any` so assertions can reach into responses without a type for every endpoint.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function call<T = any>(
   h: Harness,
   user: TestUser | null,

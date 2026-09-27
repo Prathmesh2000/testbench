@@ -21,7 +21,11 @@ export class SqlFileMigrationProvider implements MigrationProvider {
     for (const file of files) {
       const text = await readFile(this.dir + file, 'utf8');
       // Forward-only: rolling back a data migration in production is a new migration, not a down script.
-      migrations[file.replace(/\.sql$/, '')] = { up: (db) => sql.raw(text).execute(db) };
+      migrations[file.replace(/\.sql$/, '')] = {
+        up: async (db) => {
+          await sql.raw(text).execute(db);
+        },
+      };
     }
     return migrations;
   }
