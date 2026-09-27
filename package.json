@@ -1,0 +1,29 @@
+{
+  "name": "testbench",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.1.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "infra:up": "docker compose -f infra/local/docker-compose.yml up -d --wait",
+    "infra:down": "docker compose -f infra/local/docker-compose.yml down",
+    "db:migrate": "pnpm --filter @tb/db migrate",
+    "seed": "pnpm --filter @tb/db seed",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "test:e2e": "pnpm --filter @tb/e2e test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^10.11.0",
+    "prettier": "^3.6.0",
+    "turbo": "^2.11.4",
+    "typescript": "~6.0.0",
+    "typescript-eslint": "^8.70.1"
+  }
+}

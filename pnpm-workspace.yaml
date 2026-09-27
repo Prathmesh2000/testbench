@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - packages/*
+  - services/*
+  - deploy/*
+  - db
+  - e2e
+allowBuilds:
+  esbuild: true

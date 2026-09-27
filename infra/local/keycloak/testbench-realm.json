@@ -1,0 +1,88 @@
+{
+  "realm": "testbench",
+  "enabled": true,
+  "displayName": "Testbench",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 28800,
+  "clients": [
+    {
+      "clientId": "testbench-web",
+      "name": "Testbench web app",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "testbench-web-dev-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["http://localhost:3000/*"],
+      "webOrigins": ["http://localhost:3000"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "core-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "core-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "anita.desai",
+      "email": "anita.desai@paytrail.in",
+      "firstName": "Anita",
+      "lastName": "Desai",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "Testbench@123", "temporary": false }]
+    },
+    {
+      "username": "rahul.verma",
+      "email": "rahul.verma@paytrail.in",
+      "firstName": "Rahul",
+      "lastName": "Verma",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "Testbench@123", "temporary": false }]
+    },
+    {
+      "username": "sneha.iyer",
+      "email": "sneha.iyer@paytrail.in",
+      "firstName": "Sneha",
+      "lastName": "Iyer",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "Testbench@123", "temporary": false }]
+    },
+    {
+      "username": "aarav.mehta",
+      "email": "aarav.mehta@paytrail.in",
+      "firstName": "Aarav",
+      "lastName": "Mehta",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "Testbench@123", "temporary": false }]
+    },
+    {
+      "username": "aditya.chauhan",
+      "email": "aditya.chauhan@paytrail.in",
+      "firstName": "Aditya",
+      "lastName": "Chauhan",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "Testbench@123", "temporary": false }]
+    }
+  ]
+}
