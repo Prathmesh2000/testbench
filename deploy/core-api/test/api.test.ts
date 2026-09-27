@@ -271,6 +271,19 @@ describe('runs and execution', () => {
     expect(res.status).toBe(400);
   });
 
+  it('records a step that does not finish the case', async () => {
+    // Step 1 of 2 passed leaves the item untested, so the run counters must not move.
+    const item = items.find((i) => i.caseKey === checkout.key)!;
+    const res = await call<RecordResultResponse>(h, h.users.tester, 'POST', `${url(item.id)}/results`, {
+      stepIndex: 0,
+      status: 'passed',
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.item.status).toBe('untested');
+    expect(res.body.item.stepStatus).toEqual(['passed', 'untested']);
+    expect(res.body.counts).toMatchObject({ total: 4, untested: 4 });
+  });
+
   it('auto-blocks dependents in the same configuration and releases them when fixed', async () => {
     const loginChrome = items[0]!;
     const checkoutChrome = items.find((i) => i.caseKey === checkout.key && i.config === loginChrome.config)!;

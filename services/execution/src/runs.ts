@@ -381,6 +381,16 @@ async function applyCounters(
 ): Promise<RunCounts> {
   const total: Partial<Record<CounterField, number>> = {};
   for (const d of deltas) for (const f of COUNTER_FIELDS) if (d[f]) total[f] = (total[f] ?? 0) + d[f];
+  // Most step results do not change the item's status (step 1 of 5 passed), so there is often
+  // nothing to add; read the counters instead of issuing an UPDATE with an empty SET.
+  if (!COUNTER_FIELDS.some((f) => total[f])) {
+    const run = await trx
+      .selectFrom('exec.run')
+      .select(['total', 'passed', 'failed', 'blocked', 'skipped'])
+      .where('id', '=', runId)
+      .executeTakeFirstOrThrow();
+    return countsOf(run);
+  }
   const run = await trx
     .updateTable('exec.run')
     .set((eb) =>
