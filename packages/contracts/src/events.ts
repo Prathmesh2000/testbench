@@ -23,5 +23,10 @@ export const EVENT_TYPES = [
   'run.created',
   'result.recorded',
   'user.role_changed',
+  'run.prepared',
+  'defect.created',
+  'defect.linked',
+  'defect.status_changed',
+  'retest.completed',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];

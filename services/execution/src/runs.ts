@@ -20,6 +20,7 @@ import { caseFilter, loadModules, modulePaths } from '@tb/repository';
 import { sql } from 'kysely';
 import { autoBlockChanges, type BlockableItem } from './auto-block';
 import { counterDelta, deriveItemStatus, withStepStatus, type CounterField } from './item-status';
+import { createPreparedRun } from './run-prep';
 import { orderByPrerequisites } from './run-order';
 
 interface Actor {
@@ -27,10 +28,7 @@ interface Actor {
   userId: string;
 }
 
-/**
- * ponytail: runs are expanded synchronously inside the request, capped at 5,000 cases. The 800k-case
- * runs in HLD §3.1 need the background expander ("Preparing…" status), planned alongside M2's jobs.
- */
+/** Runs up to this many cases are written inside the request; larger ones are prepared in the background (run-prep.ts). */
 export const MAX_RUN_CASES = 5_000;
 
 const COUNTER_FIELDS: CounterField[] = ['passed', 'failed', 'blocked', 'skipped'];
@@ -145,11 +143,6 @@ export async function createRun(
     .execute();
   if (cases.length === 0)
     throw badRequest('No cases match this selection. Widen the filter or pick cases in the grid.');
-  if (cases.length > MAX_RUN_CASES) {
-    throw badRequest(
-      `This selection has more than ${MAX_RUN_CASES.toLocaleString('en-IN')} cases. Narrow the filter or split it into several runs.`,
-    );
-  }
   if (body.assigneeIds.length) {
     const members = await trx
       .selectFrom('iam.membership')
@@ -160,6 +153,10 @@ export async function createRun(
     if (members.length !== new Set(body.assigneeIds).size)
       throw badRequest('Every assignee must be a member of this organisation.');
   }
+
+  // Too big to write inside this request: create it in "preparing" state and let the worker fill it.
+  if (cases.length > MAX_RUN_CASES)
+    return getRun(trx, projectId, await createPreparedRun(trx, actor, projectId, body));
 
   const deps = await trx
     .selectFrom('repo.case_dependency')

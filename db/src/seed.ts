@@ -56,7 +56,8 @@ async function insertBatched(table: string, rows: Row[]): Promise<void> {
 }
 
 async function reset(): Promise<void> {
-  await sql`TRUNCATE outbox.event, exec.evidence, exec.step_result, exec.run_item, exec.run,
+  await sql`TRUNCATE outbox.processed, outbox.event, search.filter_subscription, search.saved_filter,
+    defect.event, defect.retest, defect.item_link, defect.sync_state, defect.defect, exec.run_prep, exec.evidence, exec.step_result, exec.run_item, exec.run,
     repo.bulk_job, repo.module_stats, repo.case_dependency, repo.case_version, repo.test_case, repo.module,
     repo.project, iam.membership, iam.app_user, iam.org CASCADE`.execute(db);
 }

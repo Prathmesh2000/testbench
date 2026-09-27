@@ -418,3 +418,143 @@ export interface HomeSummary {
   queue: QueueItem[];
   activeRuns: RunSummary[];
 }
+
+// ---------- M2: search ----------
+
+export const SearchBody = z.object({
+  tql: z.string().max(4000),
+  cursor: z.string().max(2000).optional(),
+  limit: z.number().int().min(1).max(200).default(50),
+});
+
+/** Every matching key (up to the run limit), for "Create run from results". */
+export const SearchKeysBody = z.object({ tql: z.string().max(4000) });
+
+export interface SearchHit extends CaseRow {
+  /** Matched text wrapped in <mark>; the web app renders only these tags. */
+  highlight: { title?: string; steps?: string };
+}
+
+export interface SearchResult {
+  total: number;
+  /** True when there are more matches than `total` counts exactly (100,000+). */
+  totalCapped: boolean;
+  tookMs: number;
+  items: SearchHit[];
+  groups: CaseGroup[] | null;
+  nextCursor: string | null;
+}
+
+export interface TqlProblem {
+  message: string;
+  start: number;
+  end: number;
+}
+
+export const SavedFilterBody = z.object({
+  name: z.string().trim().min(1).max(120),
+  tql: z.string().max(4000),
+  shared: z.boolean().default(false),
+});
+
+export interface SavedFilter {
+  id: string;
+  name: string;
+  tql: string;
+  shared: boolean;
+  owner: UserRef;
+  mine: boolean;
+  subscribed: boolean;
+}
+
+// ---------- M2: defects ----------
+
+export const SEVERITIES = ['Blocker', 'Critical', 'Major', 'Minor', 'Trivial'] as const;
+export type Severity = (typeof SEVERITIES)[number];
+
+export const LogBugBody = z.object({
+  runId: z.uuid(),
+  itemId: z.uuid(),
+  summary: z.string().trim().min(5).max(250),
+  severity: z.enum(SEVERITIES).default('Major'),
+  labels: z.array(label).max(10).default([]),
+});
+
+export const LinkBugBody = z.object({
+  runId: z.uuid(),
+  itemId: z.uuid(),
+  jiraKey: z.string().trim().regex(/^[A-Z][A-Z0-9]{0,9}-\d+$/i, 'Use a Jira key such as PAY-4938'),
+});
+
+export const RetestBody = z
+  .object({
+    status: z.enum(['passed', 'failed']),
+    build: z.string().trim().min(1).max(60),
+    note: z.string().trim().max(2000).optional(),
+  })
+  .refine((b) => b.status === 'passed' || !!b.note, { message: 'Say what still fails, so the developer can see it in Jira', path: ['note'] });
+
+export const DefectListQuery = z.object({
+  view: z.enum(['all', 'retest', 'mine']).default('all'),
+  status: z.enum(['open', 'done', 'any']).default('any'),
+  caseId: z.uuid().optional(),
+});
+
+export interface DefectRow {
+  id: string;
+  jiraKey: string;
+  jiraUrl: string;
+  summary: string;
+  status: string;
+  statusCategory: 'new' | 'indeterminate' | 'done';
+  severity: Severity;
+  assignee: string | null;
+  fixVersion: string | null;
+  createdAt: string;
+  syncedAt: string;
+  reporter: UserRef;
+  linkedCases: { key: string; title: string }[];
+  /** 'pending' while any linked case still waits for a retest. */
+  retest: 'pending' | 'passed' | 'failed' | null;
+}
+
+export interface DefectEvent {
+  kind: string;
+  detail: string;
+  actor: UserRef | null;
+  at: string;
+}
+
+export interface RetestItem {
+  id: string;
+  caseKey: string;
+  caseTitle: string;
+  status: 'pending' | 'passed' | 'failed';
+  assignee: UserRef | null;
+  build: string | null;
+  note: string | null;
+  requestedAt: string;
+}
+
+export interface DefectDetail extends DefectRow {
+  timeline: DefectEvent[];
+  retests: RetestItem[];
+  items: { runKey: string; runName: string; build: string; config: string; caseKey: string }[];
+}
+
+export interface SimilarDefect {
+  jiraKey: string;
+  summary: string;
+  status: string;
+  statusCategory: 'new' | 'indeterminate' | 'done';
+  /** 0–100, text similarity to the new bug's summary. */
+  similarity: number;
+  /** Already linked to a case in this project. */
+  known: boolean;
+}
+
+export interface SyncStatus {
+  connected: boolean;
+  lastSyncAt: string | null;
+  lastError: string | null;
+}

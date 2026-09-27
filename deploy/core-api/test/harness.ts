@@ -14,6 +14,8 @@ import type { FastifyInstance } from 'fastify';
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from 'jose';
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import pg from 'pg';
+import { JiraClient } from '@tb/defect';
+import { CaseIndex } from '@tb/search';
 import { buildApp } from '../src/app';
 
 // Integration harness: the real app on the local Docker stack (see README), with a locally signed token
@@ -32,6 +34,8 @@ export interface TestUser {
 
 export interface Harness {
   app: FastifyInstance;
+  index: CaseIndex;
+  jira: JiraClient;
   owner: Kysely<Database>;
   appDb: Db;
   orgId: string;
@@ -148,10 +152,29 @@ export async function startHarness(): Promise<Harness> {
     ])
     .execute();
 
-  const app = await buildApp({ db: appDb, cache, storage, verify: verify, logLevel: 'silent' });
+  const index = new CaseIndex(cfg.OPENSEARCH_URL);
+  await index.ensure();
+  const jira = new JiraClient({
+    baseUrl: cfg.JIRA_BASE_URL!,
+    email: cfg.JIRA_EMAIL!,
+    apiToken: cfg.JIRA_API_TOKEN!,
+    webhookSecret: cfg.JIRA_WEBHOOK_SECRET!,
+  });
+  const app = await buildApp({
+    db: appDb,
+    cache,
+    storage,
+    verify,
+    index,
+    jira,
+    webUrl: cfg.WEB_URL,
+    logLevel: 'silent',
+  });
 
   return {
     app,
+    index,
+    jira,
     owner,
     appDb,
     orgId,
@@ -166,7 +189,16 @@ export async function startHarness(): Promise<Harness> {
       await owner.transaction().execute(async (trx) => {
         await sql`SET LOCAL session_replication_role = replica`.execute(trx);
         for (const table of [
+          'outbox.processed',
           'outbox.event',
+          'search.filter_subscription',
+          'search.saved_filter',
+          'defect.event',
+          'defect.retest',
+          'defect.item_link',
+          'defect.sync_state',
+          'defect.defect',
+          'exec.run_prep',
           'exec.evidence',
           'exec.step_result',
           'exec.run_item',
@@ -198,7 +230,7 @@ export async function startHarness(): Promise<Harness> {
 export async function call<T = any>(
   h: Harness,
   user: TestUser | null,
-  method: 'GET' | 'POST' | 'PATCH' | 'PUT',
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   url: string,
   body?: unknown,
 ): Promise<{ status: number; body: T }> {

@@ -8,3 +8,4 @@ export * from './errors';
 export * from './outbox';
 export * from './storage';
 export type * from './deps';
+export * from './relay';

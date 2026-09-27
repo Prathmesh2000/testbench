@@ -11,6 +11,8 @@ const valid = {
   S3_ACCESS_KEY: 'k',
   S3_SECRET_KEY: 's',
   S3_BUCKET: 'evidence',
+  OPENSEARCH_URL: 'http://localhost:9200',
+  WEB_URL: 'http://localhost:3000',
 };
 
 describe('loadConfig', () => {

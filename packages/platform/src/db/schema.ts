@@ -200,6 +200,109 @@ export interface OutboxEventTable {
   version: number;
   data: ColumnType<unknown, string, string>;
   published_at: NullableTimestamp;
+  claimed_until: NullableTimestamp;
+  attempts: Generated<number>;
+  last_error: string | null;
+  dead_at: NullableTimestamp;
+}
+
+export interface ProcessedEventTable {
+  consumer: string;
+  event_id: string;
+  org_id: string;
+  processed_at: Timestamp;
+}
+
+export interface SavedFilterTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  name: string;
+  tql: string;
+  owner_id: string;
+  shared: Generated<boolean>;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface FilterSubscriptionTable {
+  filter_id: string;
+  user_id: string;
+  org_id: string;
+  created_at: Timestamp;
+}
+
+export interface DefectTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  jira_key: string;
+  jira_id: string | null;
+  summary: string;
+  status: string;
+  status_category: string;
+  severity: Generated<string>;
+  assignee_name: string | null;
+  fix_version: string | null;
+  jira_updated_at: NullableTimestamp;
+  synced_at: Timestamp;
+  created_by: string;
+  created_at: Timestamp;
+}
+
+export interface DefectItemLinkTable {
+  defect_id: string;
+  run_item_id: string;
+  org_id: string;
+  case_id: string;
+  linked_by: string;
+  linked_at: Timestamp;
+}
+
+export interface RetestTable {
+  id: Generated<string>;
+  org_id: string;
+  defect_id: string;
+  case_id: string;
+  assignee_id: string | null;
+  status: Generated<string>;
+  build: string | null;
+  note: string | null;
+  requested_at: Timestamp;
+  done_by: string | null;
+  done_at: NullableTimestamp;
+}
+
+export interface DefectEventTable {
+  id: Generated<string>;
+  org_id: string;
+  defect_id: string;
+  kind: string;
+  detail: string;
+  actor: string | null;
+  created_at: Timestamp;
+}
+
+export interface SyncStateTable {
+  project_id: string;
+  org_id: string;
+  last_run_at: Timestamp;
+  last_error: string | null;
+}
+
+export interface RunPrepTable {
+  run_id: string;
+  org_id: string;
+  project_id: string;
+  filter: ColumnType<unknown, string, string>;
+  assignees: Generated<string[]>;
+  cursor_path: string | null;
+  cursor_key: number | null;
+  cases_done: Generated<number>;
+  status: Generated<string>;
+  error: string | null;
+  created_by: string;
+  updated_at: Timestamp;
 }
 
 export interface Database {
@@ -218,4 +321,13 @@ export interface Database {
   'exec.step_result': StepResultTable;
   'exec.evidence': EvidenceTable;
   'outbox.event': OutboxEventTable;
+  'outbox.processed': ProcessedEventTable;
+  'search.saved_filter': SavedFilterTable;
+  'search.filter_subscription': FilterSubscriptionTable;
+  'defect.defect': DefectTable;
+  'defect.item_link': DefectItemLinkTable;
+  'defect.retest': RetestTable;
+  'defect.event': DefectEventTable;
+  'defect.sync_state': SyncStateTable;
+  'exec.run_prep': RunPrepTable;
 }

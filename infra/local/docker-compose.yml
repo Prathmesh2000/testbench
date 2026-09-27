@@ -65,6 +65,47 @@ services:
     image: axllent/mailpit:latest
     ports: ["8025:8025", "1025:1025"]
 
+  # Search index for TQL (HLD §6). Single node with the security plugin off: local only, nothing
+  # outside this machine can reach it. Production uses the managed service over TLS.
+  opensearch:
+    image: opensearchproject/opensearch:3.8.0
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"
+    ports: ["9200:9200"]
+    volumes:
+      - osdata:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=2s"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  # Stand-in for Jira Cloud (HLD §10): the subset of the REST API Testbench uses, plus a page at
+  # http://localhost:8090 to move bugs between statuses, which sends Jira-style webhooks to core-api.
+  jira:
+    image: node:24-alpine
+    command: ["node", "/app/server.mjs"]
+    environment:
+      JIRA_SANDBOX_TOKEN: jira-sandbox-token
+      JIRA_WEBHOOK_URL: http://host.docker.internal:4000/webhooks/jira
+      JIRA_WEBHOOK_SECRET: jira-sandbox-webhook-secret
+      JIRA_DATA: /data/issues.json
+    ports: ["8090:8090"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes:
+      - ./jira-sandbox:/app:ro
+      - jiradata:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8090/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
 volumes:
   pgdata:
   s3data:
+  osdata:
+  jiradata:
