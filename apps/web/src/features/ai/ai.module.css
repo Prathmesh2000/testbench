@@ -1,0 +1,25 @@
+/* AI provider settings, from the canvas artboard Admin-AI.dc.html. */
+.body { padding: 14px; display: flex; flex-direction: column; gap: 16px; }
+.policies { display: flex; gap: 8px; flex-wrap: wrap; }
+.pol { flex: 1; min-width: 180px; display: flex; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; background: transparent; text-align: left; align-items: flex-start; color: var(--text); font-size: 12.5px; }
+.pol:disabled { cursor: default; }
+.pol.on { border-color: var(--accent); background: var(--accent-soft); }
+.rd { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--text3); flex: none; margin-top: 2px; }
+.pol.on .rd { border: 4px solid var(--accent); }
+.mode { font-size: 12.5px; padding: 8px 12px; border-radius: 6px; background: var(--accent-soft); color: var(--text); }
+.tasks td { vertical-align: middle; }
+.tasks select, .tasks input { height: 26px; }
+.keys { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 8px 10px; align-items: center; font-size: 12.5px; }
+.budget { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+.budget .big { font-family: 'IBM Plex Sans Condensed', sans-serif; font-size: 22px; font-weight: 600; }
+.bar { position: relative; height: 8px; border-radius: 4px; background: var(--raised2); overflow: hidden; }
+.bar i { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--accent); }
+.bar.warn i { background: var(--blocked); }
+.bar.over i { background: var(--failed); }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.suggest { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; }
+.suggest li { font-size: 12.5px; line-height: 1.4; }
+
+@media (max-width: 900px) {
+  .cols { grid-template-columns: minmax(0, 1fr); }
+}

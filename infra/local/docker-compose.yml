@@ -134,7 +134,18 @@ services:
       timeout: 3s
       retries: 30
 
+  # Offline AI (HLD §10.3), only with `--profile ai`. Ollama installed natively on Windows works the
+  # same way and is faster; the app only needs OLLAMA_BASE_URL. Pull the model once after starting:
+  #   docker compose exec ollama ollama pull qwen3:4b
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ai"]
+    ports: ["11434:11434"]
+    volumes:
+      - ollamadata:/root/.ollama
+
 volumes:
+  ollamadata:
   dynamodata:
   pgdata:
   s3data:

@@ -12,6 +12,10 @@ Built so far:
 - **M3**: a standalone notification service (email, SMS, Slack, Microsoft Teams, Discord, in-app) with rules,
   templates, per-person preferences and quiet hours, unread fallback to email, retries and a delivery log; the bell,
   the notification console and personal settings in the web app.
+- **M4**: analytics (overview, release readiness with go/no-go sign-off, test health, build comparison, workload),
+  PRDs with requirement extraction, version diff, traceability and change impact (linked cases flagged Needs review),
+  and AI assist (draft cases from a requirement, edge-case suggestions) through one provider layer for OpenAI,
+  Anthropic, xAI and offline Ollama, with per-task models, tenant policy, bring-your-own keys and token budgets.
 
 ## Run it locally
 
@@ -52,6 +56,23 @@ Notifications land in **Mailpit** (email, http://localhost:8025), the **provider
 SMS, http://localhost:8091) and the bell. Admins manage rules, templates and channels in the Notification console;
 pointing a channel at a real Slack, Teams or Discord webhook sends for real.
 
+**AI** runs offline by default (`AI_MODE=local`): install [Ollama](https://ollama.com) and `ollama pull qwen3:4b`, or
+start the `ai` profile (`docker compose -f infra/local/docker-compose.yml --profile ai up -d`). On a CPU a call takes
+about a minute. `AI_MODE=cloud` uses the provider keys in `.env` (or keys an Org Admin adds in Settings → AI);
+`AI_MODE=mock` answers from recorded responses, which is what the tests use.
+
+```mermaid
+flowchart LR
+  T[AI task] --> C{AI_MODE}
+  C -- local --> O[Ollama :11434]
+  C -- cloud --> R[Tenant policy + budget] --> P[Configured model, then fallbacks] --> V[Zod-validated answer]
+  C -- mock --> M[Recorded answer]
+  O & V & M --> U[(ai.usage meter)]
+```
+
+PRDs whose paragraphs start with ids such as `REQ-AP-04` are read without AI and keep their ids across versions;
+other documents go through AI extraction.
+
 ### Accounts
 
 All passwords are `Testbench@123` (local realm only).
@@ -81,7 +102,7 @@ The integration tests create their own organisations and users and delete them a
 |---|---|
 | `apps/web` | Next.js app. Screens live in `src/features/*`; design tokens in `src/app/globals.css` come from the Claude Design canvas |
 | `deploy/core-api` | The API process: mounts the service modules below (HLD §1.1) |
-| `services/iam`, `repository`, `execution`, `search`, `defect` | Service modules: routes, queries, and pure domain logic with unit tests |
+| `services/iam`, `repository`, `execution`, `search`, `defect`, `analytics`, `docs`, `ai` | Service modules: routes, queries, and pure domain logic with unit tests |
 | `services/notification`, `deploy/notification-local` | The standalone notification service (its own DynamoDB and SQS) and its local process |
 | `services/notify-client` | core-api's side: turns events into notifications, and the inbox, preferences and console routes |
 | `packages/tql` | The TQL query language: parser, autocomplete and highlighting, shared by API and web |

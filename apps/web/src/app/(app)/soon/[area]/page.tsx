@@ -1,13 +1,8 @@
 import { Icon } from '@/components/Icon';
 
 const AREAS: Record<string, { title: string; milestone: string; what: string }> = {
-  defects: { title: 'Defects', milestone: 'M2', what: 'Log bugs to Jira from a failed step, two-way status sync and the retest queue.' },
-  search: { title: 'Search', milestone: 'M2', what: 'TQL queries with proximity search, grouping, saved filters and subscriptions.' },
-  analytics: { title: 'Analytics', milestone: 'M4', what: 'Dashboards, release readiness, test health, build comparison and workload.' },
-  docs: { title: 'Docs & PRDs', milestone: 'M4', what: 'PRDs with requirement extraction, traceability and change impact.' },
   boards: { title: 'Boards', milestone: 'M5', what: 'Live documents, sheets and whiteboards.' },
   meetings: { title: 'Meetings', milestone: 'M5', what: 'Calendar scheduling, notes and action items that become cases or bugs.' },
-  notifications: { title: 'Notifications', milestone: 'M3', what: 'Email, SMS, Slack, Teams, Discord and in-app notifications with rules and templates.' },
   admin: { title: 'Admin', milestone: 'M5', what: 'Members, the roles matrix, integrations, AI providers and the audit log.' },
 };
 

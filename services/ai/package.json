@@ -1,0 +1,30 @@
+{
+  "name": "@tb/ai",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.65",
+    "@ai-sdk/openai": "^4.0.78",
+    "@ai-sdk/xai": "^5.0.10",
+    "@tb/contracts": "workspace:*",
+    "@tb/iam": "workspace:*",
+    "@tb/platform": "workspace:*",
+    "ai": "^7.0.116",
+    "fastify": "^5.12.5",
+    "fastify-type-provider-zod": "^7.0.0",
+    "kysely": "^0.29.6",
+    "ollama-ai-provider-v2": "^4.0.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.2"
+  }
+}

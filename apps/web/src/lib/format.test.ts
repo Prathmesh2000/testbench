@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ago, clock, fmt, initials, minutesLabel } from './format';
+import { ago, clock, fmt, initials, lakhs, minutesLabel } from './format';
 
 describe('format', () => {
   it('groups digits the Indian way', () => {
@@ -25,5 +25,11 @@ describe('format', () => {
   it('takes up to two initials', () => {
     expect(initials('Sneha Iyer')).toBe('SI');
     expect(initials('anita')).toBe('A');
+  });
+
+  it('writes large counts in lakh and crore', () => {
+    expect(lakhs(8400)).toBe('8,400');
+    expect(lakhs(7_420_000)).toBe('74.2 L');
+    expect(lakhs(10_000_000)).toBe('1 Cr');
   });
 });

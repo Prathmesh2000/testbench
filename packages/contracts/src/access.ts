@@ -14,11 +14,14 @@ export const PERMISSIONS = [
   'run.signoff',
   'member.manage',
   'project.manage',
+  'ai.use',
+  /** Org-wide AI policy, models and keys: only Org Admins hold it. */
+  'ai.configure',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
 const viewer: Permission[] = ['case.read', 'run.read'];
-const tester: Permission[] = [...viewer, 'case.write', 'run.execute'];
+const tester: Permission[] = [...viewer, 'case.write', 'run.execute', 'ai.use'];
 const testLead: Permission[] = [...tester, 'case.delete', 'case.review', 'run.create', 'run.signoff'];
 const projectAdmin: Permission[] = [...testLead, 'member.manage', 'project.manage'];
 

@@ -305,6 +305,103 @@ export interface RunPrepTable {
   updated_at: Timestamp;
 }
 
+export interface RequirementJson {
+  ref: string;
+  title: string;
+  text: string;
+}
+
+export interface DocumentTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  title: string;
+  current_version: Generated<number>;
+  created_by: string;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface DocumentVersionTable {
+  document_id: string;
+  version: number;
+  org_id: string;
+  body: string;
+  requirements: Json<RequirementJson[]>;
+  extracted_by: string;
+  created_by: string;
+  created_at: Timestamp;
+}
+
+export interface RequirementTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  document_id: string;
+  ref: string;
+  title: string;
+  text: string;
+  position: number;
+  change: Generated<string>;
+  changed_in: number;
+}
+
+export interface RequirementCaseTable {
+  requirement_id: string;
+  case_id: string;
+  org_id: string;
+  project_id: string;
+  linked_by: string;
+  linked_at: Timestamp;
+}
+
+export interface CaseFlagTable {
+  case_id: string;
+  requirement_id: string;
+  org_id: string;
+  project_id: string;
+  kind: string;
+  reason: string;
+  flagged_at: Timestamp;
+}
+
+export interface SignoffTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  build: string;
+  decision: string;
+  note: Generated<string>;
+  criteria: ColumnType<unknown, string, string>;
+  decided_by: string;
+  decided_at: Timestamp;
+}
+
+export interface AiConfigTable {
+  org_id: string;
+  policy: Generated<string>;
+  allowed: Generated<string[]>;
+  tasks: ColumnType<Record<string, unknown>, string | undefined, string>;
+  monthly_budget: ColumnType<number, number | undefined, number>;
+  keys: ColumnType<Record<string, { ciphertext: string; hint: string }>, string | undefined, string>;
+  updated_by: string | null;
+  updated_at: Timestamp;
+}
+
+export interface AiUsageTable {
+  id: Generated<string>;
+  org_id: string;
+  user_id: string | null;
+  task: string;
+  provider: string;
+  model: string;
+  input_tokens: Generated<number>;
+  output_tokens: Generated<number>;
+  ok: boolean;
+  error: string | null;
+  created_at: Timestamp;
+}
+
 export interface Database {
   'iam.org': OrgTable;
   'iam.app_user': AppUserTable;
@@ -330,4 +427,12 @@ export interface Database {
   'defect.event': DefectEventTable;
   'defect.sync_state': SyncStateTable;
   'exec.run_prep': RunPrepTable;
+  'docs.document': DocumentTable;
+  'docs.document_version': DocumentVersionTable;
+  'docs.requirement': RequirementTable;
+  'docs.requirement_case': RequirementCaseTable;
+  'docs.case_flag': CaseFlagTable;
+  'analytics.signoff': SignoffTable;
+  'ai.config': AiConfigTable;
+  'ai.usage': AiUsageTable;
 }

@@ -1,0 +1,1 @@
+export { docsRoutes } from './routes';

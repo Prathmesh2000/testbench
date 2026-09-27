@@ -56,7 +56,8 @@ async function insertBatched(table: string, rows: Row[]): Promise<void> {
 }
 
 async function reset(): Promise<void> {
-  await sql`TRUNCATE outbox.processed, outbox.event, search.filter_subscription, search.saved_filter,
+  await sql`TRUNCATE ai.usage, ai.config, analytics.signoff, docs.case_flag, docs.requirement_case, docs.requirement,
+    docs.document_version, docs.document, outbox.processed, outbox.event, search.filter_subscription, search.saved_filter,
     defect.event, defect.retest, defect.item_link, defect.sync_state, defect.defect, exec.run_prep, exec.evidence, exec.step_result, exec.run_item, exec.run,
     repo.bulk_job, repo.module_stats, repo.case_dependency, repo.case_version, repo.test_case, repo.module,
     repo.project, iam.membership, iam.app_user, iam.org CASCADE`.execute(db);
@@ -85,7 +86,7 @@ async function seed(): Promise<void> {
       key: 'PAY',
       name: 'Payments web',
       next_case_no: 10001 + caseCount,
-      next_run_no: 4,
+      next_run_no: 4 + HISTORY_RUNS,
     })
     .execute();
 
@@ -243,7 +244,9 @@ async function seed(): Promise<void> {
         note: v === 1 ? 'Created' : 'Updated expected results after review',
         author_id: pick(owners).id,
         // v1 on creation, the current version at the last update, anything between spread evenly.
-        created_at: new Date(created.getTime() + ((updated.getTime() - created.getTime()) * (v - 1)) / Math.max(1, versions - 1)),
+        created_at: new Date(
+          created.getTime() + ((updated.getTime() - created.getTime()) * (v - 1)) / Math.max(1, versions - 1),
+        ),
       });
     }
     cases.push({ id, keyNo: 10001 + i, leafPath: leaf.path, labels, steps, version: versions, title });
@@ -260,6 +263,7 @@ async function seed(): Promise<void> {
   );
 
   await seedRuns(orgId, projectId, users, cases, login.id);
+  await seedHistory(orgId, projectId, users, cases);
 
   console.log(
     `seeded ${caseCount.toLocaleString('en-IN')} cases (${size}) in ${((Date.now() - started) / 1000).toFixed(1)}s`,
@@ -391,6 +395,90 @@ async function seedRuns(
   }
 }
 
+const HISTORY_RUNS = 20;
+
+/**
+ * A month of completed nightly regressions, so analytics has trends to draw: most cases pass
+ * steadily, a few flip between passed and failed (flaky) and a few fail every night.
+ */
+async function seedHistory(
+  orgId: string,
+  projectId: string,
+  users: { id: string; email: string }[],
+  cases: { id: string; version: number; steps: SeedStep[] }[],
+): Promise<void> {
+  const testers = users.filter((u) => /^(sneha|aarav|priya|rohan)\./.test(u.email));
+  const pool = cases.slice(200, 440);
+  const personality = (i: number) => (i % 20 === 0 ? 'broken' : i % 13 === 0 ? 'flaky' : 'stable');
+  const latest = new Map<string, { status: string; at: Date }>();
+
+  for (let n = 0; n < HISTORY_RUNS; n++) {
+    const runId = randomUUID();
+    const at = daysAgo(30 - n * 1.5);
+    const counts = { passed: 0, failed: 0, blocked: 0, skipped: 0 };
+    const items: Row[] = pool.map((c, i) => {
+      const kind = personality(i);
+      const status =
+        kind === 'broken'
+          ? 'failed'
+          : kind === 'flaky'
+            ? rand() < 0.5
+              ? 'failed'
+              : 'passed'
+            : weighted([
+                ['passed', 94],
+                ['failed', 3],
+                ['blocked', 2],
+                ['skipped', 1],
+              ]);
+      counts[status as keyof typeof counts]++;
+      latest.set(c.id, { status, at });
+      return {
+        id: randomUUID(),
+        org_id: orgId,
+        project_id: projectId,
+        run_id: runId,
+        case_id: c.id,
+        case_version: c.version,
+        config: CONFIGS[0]!,
+        position: i,
+        assignee_id: testers[i % testers.length]!.id,
+        status,
+        step_status: JSON.stringify(c.steps.map(() => status)),
+        duration_s: 60 + Math.floor(rand() * 300),
+        updated_at: at,
+      };
+    });
+    await db
+      .insertInto('exec.run')
+      .values({
+        id: runId,
+        org_id: orgId,
+        project_id: projectId,
+        key_no: 4 + n,
+        name: `Nightly regression — build ${8790 + n}`,
+        type: 'regression',
+        environment: 'Staging-IN',
+        build: String(8790 + n),
+        configs: [CONFIGS[0]!],
+        status: 'completed',
+        total: items.length,
+        ...counts,
+        created_by: testers[0]!.id,
+        created_at: at,
+      })
+      .execute();
+    await insertBatched('exec.run_item', items);
+  }
+  for (const [caseId, r] of latest)
+    await db
+      .updateTable('repo.test_case')
+      .set({ last_result: r.status, last_run_at: r.at })
+      .where('project_id', '=', projectId)
+      .where('id', '=', caseId)
+      .execute();
+}
+
 /**
  * Reseeding gives every user a new id, but the API caches identities in Valkey for five minutes;
  * stale entries would point at users that no longer exist. One FLUSHDB over a raw socket clears them
@@ -405,7 +493,9 @@ async function flushIdentityCache(): Promise<void> {
     socket.once('data', () => socket.end());
     socket.once('close', () => resolve());
     socket.once('error', () => {
-      console.warn('could not reach Valkey to clear cached identities; restart core-api if sign-in misbehaves');
+      console.warn(
+        'could not reach Valkey to clear cached identities; restart core-api if sign-in misbehaves',
+      );
       resolve();
     });
   });

@@ -25,6 +25,19 @@ const Config = z.object({
   NOTIFY_SERVICE_KEY: z.string().min(24).optional(),
   /** Minutes between reconcile passes (HLD §5.4). */
   JIRA_RECONCILE_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
+  // AI provider layer (HLD §2.3, §10.3). `mock` answers from recorded responses so tests never
+  // depend on a model; `local` sends everything to Ollama; `cloud` uses the providers below.
+  AI_MODE: z.enum(['mock', 'local', 'cloud']).default('mock'),
+  OLLAMA_BASE_URL: z.url().default('http://localhost:11434'),
+  AI_LOCAL_MODEL: z.string().min(1).default('qwen3:4b'),
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  XAI_API_KEY: z.string().min(1).optional(),
+  AI_OPENAI_MODEL: z.string().min(1).default('gpt-5-mini'),
+  AI_ANTHROPIC_MODEL: z.string().min(1).default('claude-sonnet-5'),
+  AI_XAI_MODEL: z.string().min(1).default('grok-4'),
+  /** Encrypts tenant API keys at rest (KMS in AWS). Without it, tenants can't bring their own keys. */
+  AI_KEY_SECRET: z.string().min(32).optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 });
 export type Config = z.infer<typeof Config>;

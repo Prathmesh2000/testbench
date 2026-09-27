@@ -4,6 +4,14 @@
 const numberFormat = new Intl.NumberFormat('en-IN');
 export const fmt = (n: number) => numberFormat.format(n);
 
+/** Large counts the Indian way: "8,400", "74.2 L" (lakh), "1 Cr" (crore). Used for token budgets. */
+export function lakhs(n: number): string {
+  const short = (v: number) => String(Math.round(v * 10) / 10);
+  if (n >= 1e7) return `${short(n / 1e7)} Cr`;
+  if (n >= 1e5) return `${short(n / 1e5)} L`;
+  return fmt(n);
+}
+
 export function minutesLabel(total: number): string {
   if (total < 60) return `${total}m`;
   const h = Math.floor(total / 60);

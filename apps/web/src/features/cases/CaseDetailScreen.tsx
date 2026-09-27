@@ -10,6 +10,8 @@ import { Avatar, CaseStatusPill, PriorityTag, ResultStatus } from '@/components/
 import { api, ApiError, get } from '@/lib/api';
 import { ago, dateTimeIST } from '@/lib/format';
 import { stepsToGherkin, tokenizeGherkinLine } from '@/lib/gherkin';
+import { EdgeCases } from '@/features/ai/EdgeCases';
+import { ReviewBanner } from './ReviewBanner';
 import { StepsEditor } from './StepsEditor';
 import s from './detail.module.css';
 
@@ -49,6 +51,7 @@ export function CaseDetailScreen({ caseKey }: { caseKey: string }) {
           </div>
         </div>
         <div className={s.body}>
+          <ReviewBanner c={c} />
           {tab === 'steps' && <StepsTab c={c} canEdit={can('case.write')} />}
           {tab === 'versions' && <VersionsTab c={c} />}
           {tab === 'links' && <LinksTab c={c} canEdit={can('case.write')} />}
@@ -76,6 +79,7 @@ export function CaseDetailScreen({ caseKey }: { caseKey: string }) {
             <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>{c.labels.map((l) => <span key={l} className="lbl">{l}</span>)}</div>
           </>
         )}
+        {can('ai.use') && <EdgeCases key={c.key} c={c} />}
       </aside>
     </div>
   );

@@ -20,7 +20,14 @@ export function notifier(client: NotifyClient, index: CaseIndex, webUrl: string)
 
   return {
     name: 'notifier',
-    types: ['run.created', 'run.prepared', 'defect.created', 'defect.status_changed', 'testcase.created'],
+    types: [
+      'run.created',
+      'run.prepared',
+      'defect.created',
+      'defect.status_changed',
+      'testcase.created',
+      'document.versioned',
+    ],
     async handle(trx, e) {
       switch (e.type) {
         case 'run.created':
@@ -99,6 +106,47 @@ export function notifier(client: NotifyClient, index: CaseIndex, webUrl: string)
         }
         case 'testcase.created':
           await filterMatches(trx, e, send, index, webUrl);
+          return;
+        case 'document.versioned': {
+          if (!e.data.flagged) return;
+          const documentId = String(e.data.document_id);
+          const doc = await trx
+            .selectFrom('docs.document')
+            .select('title')
+            .where('id', '=', documentId)
+            .executeTakeFirst();
+          if (!doc) return;
+          // Each owner hears about their own flagged cases once, with their own count.
+          const owners = await trx
+            .selectFrom('docs.case_flag as f')
+            .innerJoin('docs.requirement as r', 'r.id', 'f.requirement_id')
+            .innerJoin('repo.test_case as c', (j) =>
+              j.onRef('c.id', '=', 'f.case_id').onRef('c.project_id', '=', 'f.project_id'),
+            )
+            .innerJoin('iam.app_user as u', 'u.id', 'c.owner_id')
+            .select([
+              'u.id',
+              'u.name',
+              'u.email',
+              (eb) => eb.fn.count<number>('f.case_id').distinct().as('count'),
+            ])
+            .where('r.document_id', '=', documentId)
+            .where('r.changed_in', '=', Number(e.data.version))
+            .where('c.status', '=', 'needs_review')
+            .groupBy(['u.id', 'u.name', 'u.email'])
+            .execute();
+          for (const o of owners) {
+            if (o.id === e.actor) continue;
+            await send(
+              e,
+              'requirement.changed',
+              [{ id: o.id, name: o.name, email: o.email }],
+              { documentTitle: doc.title, version: Number(e.data.version), count: o.count },
+              `${webUrl}/docs?doc=${documentId}`,
+              `:${o.id}`,
+            );
+          }
+        }
       }
     },
   };

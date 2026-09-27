@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { AiService } from '@tb/ai';
 import { JiraClient, startReconciler } from '@tb/defect';
 import { startRunPrepWorker } from '@tb/execution';
 import { NotifyClient, notifier } from '@tb/notify-client';
@@ -46,6 +47,15 @@ const jira =
 const notify =
   cfg.NOTIFY_URL && cfg.NOTIFY_SERVICE_KEY ? new NotifyClient(cfg.NOTIFY_URL, cfg.NOTIFY_SERVICE_KEY) : null;
 
+const ai = new AiService(db, {
+  mode: cfg.AI_MODE,
+  ollamaUrl: cfg.OLLAMA_BASE_URL,
+  localModel: cfg.AI_LOCAL_MODEL,
+  platformKeys: { openai: cfg.OPENAI_API_KEY, anthropic: cfg.ANTHROPIC_API_KEY, xai: cfg.XAI_API_KEY },
+  models: { openai: cfg.AI_OPENAI_MODEL, anthropic: cfg.AI_ANTHROPIC_MODEL, xai: cfg.AI_XAI_MODEL },
+  keySecret: cfg.AI_KEY_SECRET ?? null,
+});
+
 // The cache logs through the app logger once it exists; before that there is nothing to warn about yet.
 const cacheLog = { warn: (obj: object, msg: string) => app.log.warn(obj, msg) };
 const cache = JsonCache.connect(cfg.VALKEY_URL, cacheLog);
@@ -57,11 +67,13 @@ const app = await buildApp({
   index,
   jira,
   notify,
+  ai,
   webUrl: cfg.WEB_URL,
   logLevel: cfg.LOG_LEVEL,
 });
 if (!jira) app.log.warn('Jira is not configured; defect features are disabled');
 if (!notify) app.log.warn('The notification service is not configured; notifications are not sent');
+app.log.info({ mode: cfg.AI_MODE, localModel: cfg.AI_LOCAL_MODEL }, 'AI provider layer ready');
 
 await storage.ensureBucket();
 await index.ensure();

@@ -28,5 +28,6 @@ export const EVENT_TYPES = [
   'defect.linked',
   'defect.status_changed',
   'retest.completed',
+  'document.versioned',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];

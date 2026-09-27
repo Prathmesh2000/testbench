@@ -1,4 +1,7 @@
+import { aiRoutes, type AiService } from '@tb/ai';
+import { analyticsRoutes } from '@tb/analytics';
 import { defectRoutes, jiraWebhook, type JiraClient } from '@tb/defect';
+import { docsRoutes } from '@tb/docs';
 import { executionRoutes } from '@tb/execution';
 import { notifyRoutes, type NotifyClient } from '@tb/notify-client';
 import { authPlugin, iamRoutes } from '@tb/iam';
@@ -14,13 +17,14 @@ export interface AppOptions extends ServiceDeps {
   index: CaseIndex;
   jira: JiraClient | null;
   notify: NotifyClient | null;
+  ai: AiService;
   webUrl: string;
   logLevel?: string;
 }
 
 /**
- * Builds the core-api deploy unit (HLD §1.1): IAM, Test Repository, Execution, Search and Defect
- * Integration mounted in one process under /api/v1, plus the Jira webhook. Kept separate from
+ * Builds the core-api deploy unit (HLD §1.1): IAM, Test Repository, Execution, Search, Defect
+ * Integration, Analytics, Docs and AI Assist mounted in one process under /api/v1, plus the Jira webhook. Kept separate from
  * server.ts so tests can build it with their own dependencies and call it with inject().
  */
 export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
@@ -64,6 +68,9 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
       await api.register(executionRoutes, deps);
       await api.register(searchRoutes, { ...deps, index: opts.index });
       await api.register(defectRoutes, { ...deps, jira: opts.jira, webUrl: opts.webUrl });
+      await api.register(analyticsRoutes, deps);
+      await api.register(docsRoutes, { ...deps, ai: opts.ai });
+      await api.register(aiRoutes, { ...deps, ai: opts.ai });
       if (opts.notify) await api.register(notifyRoutes, { ...deps, client: opts.notify });
     },
     { prefix: '/api/v1' },

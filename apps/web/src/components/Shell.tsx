@@ -28,10 +28,10 @@ const NAV: { group: string; items: NavItem[] }[] = [
   ] },
   { group: 'Explore', items: [
     { href: '/search', label: 'Search', icon: 'search' },
-    { href: '/soon/analytics', label: 'Analytics', icon: 'chart', soon: 'M4' },
+    { href: '/analytics', label: 'Analytics', icon: 'chart' },
   ] },
   { group: 'Knowledge', items: [
-    { href: '/soon/docs', label: 'Docs & PRDs', icon: 'doc', soon: 'M4' },
+    { href: '/docs', label: 'Docs & PRDs', icon: 'doc' },
     { href: '/soon/boards', label: 'Boards', icon: 'board', soon: 'M5' },
     { href: '/soon/meetings', label: 'Meetings', icon: 'calendar', soon: 'M5' },
   ] },

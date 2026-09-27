@@ -52,6 +52,10 @@ export const NOTIFY_EVENTS = {
       caseTitle: 'Verify wallet top-up limit',
     },
   },
+  'requirement.changed': {
+    label: 'PRD change flags your cases for review',
+    sample: { documentTitle: 'UPI Autopay mandates', version: 3, count: 14 },
+  },
   'test.message': { label: 'Test message', sample: { sentBy: 'Anita Desai' } },
 } as const;
 export type NotifyEvent = keyof typeof NOTIFY_EVENTS;

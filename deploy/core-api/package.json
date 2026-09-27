@@ -11,8 +11,11 @@
     "lint": "eslint src test"
   },
   "dependencies": {
+    "@tb/ai": "workspace:*",
+    "@tb/analytics": "workspace:*",
     "@tb/contracts": "workspace:*",
     "@tb/defect": "workspace:*",
+    "@tb/docs": "workspace:*",
     "@tb/execution": "workspace:*",
     "@tb/iam": "workspace:*",
     "@tb/notify-client": "workspace:*",

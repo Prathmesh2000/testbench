@@ -5,12 +5,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Icon } from '@/components/Icon';
 import { usePrefs, useSession, useToast } from '@/components/providers';
+import { AiSettings } from '@/features/ai/AiSettings';
 import { api, ApiError, get } from '@/lib/api';
 import s from './notify.module.css';
 
-/** Personal settings: which notifications reach me where, quiet hours, and display preferences. */
+/** Personal settings (notifications, quiet hours, display) and the organisation's AI settings. */
 export function SettingsScreen() {
-  const { me } = useSession();
+  const { me, can } = useSession();
   const prefs = usePrefs();
   const { notify } = useToast();
   const queryClient = useQueryClient();
@@ -75,6 +76,8 @@ export function SettingsScreen() {
           </div>
         )}
       </section>
+
+      {can('ai.use') && <AiSettings />}
 
       <section className="panel">
         <div className="hdr"><h3>Display</h3></div>

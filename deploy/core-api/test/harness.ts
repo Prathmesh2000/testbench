@@ -14,6 +14,7 @@ import type { FastifyInstance } from 'fastify';
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from 'jose';
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import pg from 'pg';
+import { AiService } from '@tb/ai';
 import { JiraClient } from '@tb/defect';
 import { CaseIndex, ensurePercolator } from '@tb/search';
 import { buildApp } from '../src/app';
@@ -170,6 +171,15 @@ export async function startHarness(): Promise<Harness> {
     index,
     jira,
     notify: null,
+    // Always mock in tests: CI must not depend on a model's speed or randomness (HLD §10.3).
+    ai: new AiService(appDb, {
+      mode: 'mock',
+      ollamaUrl: cfg.OLLAMA_BASE_URL,
+      localModel: cfg.AI_LOCAL_MODEL,
+      platformKeys: {},
+      models: { openai: 'm', anthropic: 'm', xai: 'm' },
+      keySecret: 'test-secret-that-is-at-least-32-characters',
+    }),
     webUrl: cfg.WEB_URL,
     logLevel: 'silent',
   });
@@ -192,6 +202,14 @@ export async function startHarness(): Promise<Harness> {
       await owner.transaction().execute(async (trx) => {
         await sql`SET LOCAL session_replication_role = replica`.execute(trx);
         for (const table of [
+          'ai.usage',
+          'ai.config',
+          'analytics.signoff',
+          'docs.case_flag',
+          'docs.requirement_case',
+          'docs.requirement',
+          'docs.document_version',
+          'docs.document',
           'outbox.processed',
           'outbox.event',
           'search.filter_subscription',

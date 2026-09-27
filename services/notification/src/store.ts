@@ -111,11 +111,16 @@ export class Store {
   }
 
   // ---------- rules ----------
-  /** A tenant's rules, seeding the defaults the first time the tenant is seen. */
+  /** A tenant's rules, seeding the default rule for any event the tenant has none for. */
   async rules(tenant: string): Promise<Rule[]> {
     const rows = await this.query<Rule & { pk: string; sk: string }>(`T#${tenant}#RULE`);
-    if (rows.length) return rows.map(({ pk: _pk, sk: _sk, ...r }) => r as Rule);
-    const seeded = DEFAULT_RULES.map((r) => ({
+    const existing = rows.map(({ pk: _pk, sk: _sk, ...r }) => r as Rule);
+    // Defaults for events the tenant has no rule for are added too, so a new event type reaches
+    // existing tenants. To silence one, disable its rule rather than deleting it.
+    const covered = new Set(existing.map((r) => r.event));
+    const missing = DEFAULT_RULES.filter((r) => !covered.has(r.event));
+    if (!missing.length) return existing;
+    const seeded = missing.map((r) => ({
       ...r,
       id: randomUUID(),
       version: 1,
@@ -125,7 +130,7 @@ export class Store {
       await this.doc.send(
         new PutCommand({ TableName: this.table, Item: { pk: `T#${tenant}#RULE`, sk: r.id, ...r } }),
       );
-    return seeded;
+    return [...existing, ...seeded];
   }
 
   /** Saves a rule as a new version, so the delivery log can say which version sent each message. */

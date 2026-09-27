@@ -41,6 +41,15 @@ export const DEFAULT_RULES: RuleBody[] = [
     enabled: true,
   },
   {
+    name: 'My cases need review after a PRD change',
+    event: 'requirement.changed',
+    condition: '',
+    userChannels: ['inapp', 'email'],
+    teamChannels: [],
+    fallbackMinutes: null,
+    enabled: true,
+  },
+  {
     name: 'Channel test',
     event: 'test.message',
     condition: '',
@@ -68,6 +77,10 @@ const TEXT: Record<NotifyEvent, TemplateText> = {
   },
   'defect.fixed': { subject: '{{jiraKey}} is fixed; retest needed', body: '{{summary}}. Retest: {{cases}}.' },
   'filter.matched': { subject: 'New case in “{{filterName}}”', body: '{{caseKey}} {{caseTitle}}' },
+  'requirement.changed': {
+    subject: '{{count}} of your cases need review',
+    body: '{{documentTitle}} v{{version}} changed requirements they cover. They still run, with a warning, until you confirm or update them.',
+  },
   'test.message': {
     subject: 'Testbench test notification',
     body: 'Sent by {{sentBy}} from the notification console. If you can read this, the channel works.',
