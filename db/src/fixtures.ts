@@ -33,41 +33,112 @@ export const PEOPLE = [
 /** Functionality tree for the PAY project; each leaf lists the behaviours its cases cover. */
 export const MODULE_TREE: Record<string, Record<string, string[]>> = {
   Checkout: {
-    Cart: ['cart total with GST applied', 'cart update when an item goes out of stock', 'coupon code stacking rules'],
-    Address: ['PIN code lookup for serviceable areas', 'saved address selection', 'address validation for the landmark field'],
-    'Payment selection': ['payment method order by last used', 'disabled methods for amounts under ₹10', 'retry payment after a failed attempt'],
+    Cart: [
+      'cart total with GST applied',
+      'cart update when an item goes out of stock',
+      'coupon code stacking rules',
+    ],
+    Address: [
+      'PIN code lookup for serviceable areas',
+      'saved address selection',
+      'address validation for the landmark field',
+    ],
+    'Payment selection': [
+      'payment method order by last used',
+      'disabled methods for amounts under ₹10',
+      'retry payment after a failed attempt',
+    ],
   },
   UPI: {
-    Collect: ['collect request to a valid VPA', 'collect request expiry after 5 minutes', 'collect request above ₹1,00,000', 'collect request when the payer bank is down'],
-    Intent: ['intent flow opening installed UPI apps', 'intent callback after app switch', 'intent flow with no UPI app installed'],
-    'Autopay mandates': ['mandate creation with monthly frequency', 'mandate pause and resume', 'mandate revoke from the payer app', 'pre-debit notification 24 hours before charge'],
+    Collect: [
+      'collect request to a valid VPA',
+      'collect request expiry after 5 minutes',
+      'collect request above ₹1,00,000',
+      'collect request when the payer bank is down',
+    ],
+    Intent: [
+      'intent flow opening installed UPI apps',
+      'intent callback after app switch',
+      'intent flow with no UPI app installed',
+    ],
+    'Autopay mandates': [
+      'mandate creation with monthly frequency',
+      'mandate pause and resume',
+      'mandate revoke from the payer app',
+      'pre-debit notification 24 hours before charge',
+    ],
     'QR scan': ['dynamic QR with a fixed amount', 'QR expiry after timeout', 'scan of a static merchant QR'],
   },
   Cards: {
-    'Add card': ['card number Luhn validation', 'card network detection for RuPay', 'expiry date in the past'],
-    'Saved cards': ['tokenised card display with last 4 digits', 'delete a saved card', 'CVV-less payment on a tokenised card'],
-    '3-D Secure': ['OTP page redirect for 3-D Secure', '3-D Secure timeout handling', 'frictionless flow for low-risk payments'],
+    'Add card': [
+      'card number Luhn validation',
+      'card network detection for RuPay',
+      'expiry date in the past',
+    ],
+    'Saved cards': [
+      'tokenised card display with last 4 digits',
+      'delete a saved card',
+      'CVV-less payment on a tokenised card',
+    ],
+    '3-D Secure': [
+      'OTP page redirect for 3-D Secure',
+      '3-D Secure timeout handling',
+      'frictionless flow for low-risk payments',
+    ],
   },
   'Net banking': {
     'Bank list': ['popular banks shown first', 'bank search by name', 'bank downtime banner'],
-    'Redirect flow': ['return URL after bank success', 'user cancelling on the bank page', 'double submit on the bank redirect'],
+    'Redirect flow': [
+      'return URL after bank success',
+      'user cancelling on the bank page',
+      'double submit on the bank redirect',
+    ],
   },
   Wallet: {
-    'Top-up': ['wallet top-up with UPI', 'top-up limit for minimum-KYC users', 'top-up failure refund to source'],
+    'Top-up': [
+      'wallet top-up with UPI',
+      'top-up limit for minimum-KYC users',
+      'top-up failure refund to source',
+    ],
     Transfers: ['wallet-to-wallet transfer', 'transfer to a blocked account', 'transfer history pagination'],
   },
   Refunds: {
-    'Full refund': ['full refund to the original method', 'refund on a cancelled order', 'refund SMS to the customer'],
+    'Full refund': [
+      'full refund to the original method',
+      'refund on a cancelled order',
+      'refund SMS to the customer',
+    ],
     'Partial refund': ['partial refund amount validation', 'multiple partial refunds up to the paid amount'],
-    'Refund status': ['refund status timeline', 'refund ARN shown to the customer', 'refund stuck beyond 7 days'],
+    'Refund status': [
+      'refund status timeline',
+      'refund ARN shown to the customer',
+      'refund stuck beyond 7 days',
+    ],
   },
   Auth: {
-    Login: ['login with a registered mobile number', 'login lockout after 5 wrong attempts', 'login with an expired password'],
-    OTP: ['OTP auto-read on Android', 'OTP retry limit', 'OTP resend after 30 seconds', 'OTP entry with a pasted value'],
-    Session: ['session timeout after 15 minutes idle', 'concurrent sessions on two devices', 'logout clearing every session'],
+    Login: [
+      'login with a registered mobile number',
+      'login lockout after 5 wrong attempts',
+      'login with an expired password',
+    ],
+    OTP: [
+      'OTP auto-read on Android',
+      'OTP retry limit',
+      'OTP resend after 30 seconds',
+      'OTP entry with a pasted value',
+    ],
+    Session: [
+      'session timeout after 15 minutes idle',
+      'concurrent sessions on two devices',
+      'logout clearing every session',
+    ],
   },
   KYC: {
-    'PAN verification': ['PAN format validation', 'PAN name mismatch handling', 'PAN verification when NSDL is slow'],
+    'PAN verification': [
+      'PAN format validation',
+      'PAN name mismatch handling',
+      'PAN verification when NSDL is slow',
+    ],
     'Aadhaar eKYC': ['Aadhaar OTP consent screen', 'masked Aadhaar number display', 'eKYC failure retry'],
     'Video KYC': ['video KYC slot booking', 'video KYC agent disconnect', 'liveness check in low light'],
   },
@@ -80,20 +151,62 @@ export const MODULE_TREE: Record<string, Record<string, string[]>> = {
     Email: ['payment receipt email', 'email unsubscribe link', 'email rendering in Outlook'],
   },
   Reports: {
-    'Transaction export': ['CSV export of 1 lakh transactions', 'export with a custom date range', 'export emailed when ready'],
-    Dashboards: ['merchant dashboard GMV widget', 'dashboard filter by payment method', 'dashboard in IST vs UTC'],
+    'Transaction export': [
+      'CSV export of 1 lakh transactions',
+      'export with a custom date range',
+      'export emailed when ready',
+    ],
+    Dashboards: [
+      'merchant dashboard GMV widget',
+      'dashboard filter by payment method',
+      'dashboard in IST vs UTC',
+    ],
   },
 };
 
 export const VERBS = ['Verify', 'Validate', 'Check', 'Ensure'];
 export const CONDITIONS = [
-  'on Chrome 128', 'on Safari 17', 'on Android 14', 'on iOS 17', 'on slow 3G', 'after a session timeout',
-  'with Hindi locale', 'for a first-time user', 'when retried twice', 'with the minimum amount ₹1',
-  'at the 23:59 settlement cutoff', 'with a screen reader', '', '', '',
+  'on Chrome 128',
+  'on Safari 17',
+  'on Android 14',
+  'on iOS 17',
+  'on slow 3G',
+  'after a session timeout',
+  'with Hindi locale',
+  'for a first-time user',
+  'when retried twice',
+  'with the minimum amount ₹1',
+  'at the 23:59 settlement cutoff',
+  'with a screen reader',
+  '',
+  '',
+  '',
 ];
-export const LABELS = ['smoke', 'regression', 'p0-flow', 'rbi-compliance', 'release-4.18', 'hindi', 'a11y', 'mobile-web'];
-export const TYPES = ['Functional', 'Functional', 'Functional', 'Regression', 'Negative', 'End-to-end', 'Accessibility'];
-export const CONFIGS = ['Chrome 128 · Win 11', 'Safari 17 · macOS 14', 'Android 14 · Pixel 8', 'iOS 17 · iPhone 15'];
+export const LABELS = [
+  'smoke',
+  'regression',
+  'p0-flow',
+  'rbi-compliance',
+  'release-4.18',
+  'hindi',
+  'a11y',
+  'mobile-web',
+];
+export const TYPES = [
+  'Functional',
+  'Functional',
+  'Functional',
+  'Regression',
+  'Negative',
+  'End-to-end',
+  'Accessibility',
+];
+export const CONFIGS = [
+  'Chrome 128 · Win 11',
+  'Safari 17 · macOS 14',
+  'Android 14 · Pixel 8',
+  'iOS 17 · iPhone 15',
+];
 
 const ACTIONS = [
   'Enter the test data from the data set and submit',
@@ -120,9 +233,17 @@ export interface SeedStep {
 export function makeSteps(rand: () => number, leaf: string, behaviour: string): SeedStep[] {
   const pick = <T>(list: readonly T[]): T => list[Math.floor(rand() * list.length)]!;
   const steps: SeedStep[] = [
-    { action: 'Sign in to the Paytrail merchant dashboard as “QA Test Store”', expected: 'Dashboard loads within 3 seconds', data: 'merchant: qa-test-store' },
+    {
+      action: 'Sign in to the Paytrail merchant dashboard as “QA Test Store”',
+      expected: 'Dashboard loads within 3 seconds',
+      data: 'merchant: qa-test-store',
+    },
     { action: `Go to ${leaf}`, expected: `${leaf} opens with no console errors`, data: '' },
-    { action: `Start the flow for: ${behaviour}`, expected: pick(EXPECTED), data: `vpa: qa.payer@okaxis · amount: ₹${Math.floor(rand() * 4000) + 1}` },
+    {
+      action: `Start the flow for: ${behaviour}`,
+      expected: pick(EXPECTED),
+      data: `vpa: qa.payer@okaxis · amount: ₹${Math.floor(rand() * 4000) + 1}`,
+    },
   ];
   const extra = 1 + Math.floor(rand() * 3);
   for (let i = 0; i < extra; i++) steps.push({ action: pick(ACTIONS), expected: pick(EXPECTED), data: '' });

@@ -1,0 +1,27 @@
+import { z } from 'zod';
+
+/**
+ * Envelope shared by every domain event (HLD §4). Consumers deduplicate on `id`, because the relay
+ * delivers at least once. `version` is the schema version of `data`, bumped on breaking changes.
+ */
+export const EventEnvelope = z.object({
+  id: z.uuid(),
+  type: z.string().regex(/^[a-z]+(\.[a-z_]+)+$/),
+  org_id: z.uuid(),
+  project_id: z.uuid().nullable(),
+  actor: z.uuid().nullable(),
+  occurred_at: z.iso.datetime(),
+  version: z.number().int().min(1),
+  data: z.record(z.string(), z.unknown()),
+});
+export type EventEnvelope = z.infer<typeof EventEnvelope>;
+
+export const EVENT_TYPES = [
+  'testcase.created',
+  'testcase.updated',
+  'testcase.bulk_updated',
+  'run.created',
+  'result.recorded',
+  'user.role_changed',
+] as const;
+export type EventType = (typeof EVENT_TYPES)[number];

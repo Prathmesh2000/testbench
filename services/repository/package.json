@@ -1,0 +1,23 @@
+{
+  "name": "@tb/repository",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@tb/contracts": "workspace:*",
+    "@tb/iam": "workspace:*",
+    "@tb/platform": "workspace:*",
+    "fastify": "^5.12.5",
+    "fastify-type-provider-zod": "^7.0.0",
+    "kysely": "^0.29.6",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.2"
+  }
+}
