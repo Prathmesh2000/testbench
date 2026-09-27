@@ -38,6 +38,19 @@ const Config = z.object({
   AI_XAI_MODEL: z.string().min(1).default('grok-4'),
   /** Encrypts tenant API keys at rest (KMS in AWS). Without it, tenants can't bring their own keys. */
   AI_KEY_SECRET: z.string().min(32).optional(),
+  // Keycloak admin API, used to create accounts for invited people. Optional: with SSO the identity
+  // provider owns accounts and an invitation only adds the Testbench membership.
+  KEYCLOAK_ADMIN_URL: z.url().optional(),
+  KEYCLOAK_REALM: z.string().min(1).default('testbench'),
+  KEYCLOAK_ADMIN_USER: z.string().min(1).optional(),
+  KEYCLOAK_ADMIN_PASSWORD: z.string().min(1).optional(),
+  // Live boards: core-api signs tickets for the collaboration server with this shared secret.
+  COLLAB_URL: z.string().regex(/^wss?:\/\//).default('ws://localhost:4300'),
+  COLLAB_SECRET: z.string().min(32).optional(),
+  /** Calendar invites for meetings; locally the provider sandbox records them. */
+  CALENDAR_URL: z.url().optional(),
+  /** The agent gateway (MCP + Slack), shown in the admin console when set. */
+  AGENT_GATEWAY_URL: z.url().optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 });
 export type Config = z.infer<typeof Config>;

@@ -10,7 +10,7 @@ import {
   type AiUsageRow,
   type TaskConfig,
 } from '@tb/contracts';
-import { AppError, withTenant, type Db, type Tx } from '@tb/platform';
+import { AppError, recordEvent, withTenant, type Db, type Tx } from '@tb/platform';
 import { generateText, NoObjectGeneratedError, Output } from 'ai';
 import { sql } from 'kysely';
 import { defaultTaskConfig, monthStart, resolveChain, type AiSettings, type CloudProvider } from './chain';
@@ -212,6 +212,13 @@ export class AiService {
         }),
       )
       .execute();
+    await recordEvent(trx, {
+      type: 'ai.config_changed',
+      orgId: caller.orgId,
+      projectId: null,
+      actor: caller.userId,
+      data: { what: 'policy and models', detail: `policy ${body.policy} · budget ${body.monthlyBudget}` },
+    });
   }
 
   /** Sets or removes a tenant key. The plain key is encrypted here and never stored or logged as is. */
@@ -235,6 +242,14 @@ export class AiService {
           .doUpdateSet({ keys: JSON.stringify(keys), updated_by: caller.userId, updated_at: new Date() }),
       )
       .execute();
+    // The key itself never goes into the event, only which provider changed.
+    await recordEvent(trx, {
+      type: 'ai.config_changed',
+      orgId: caller.orgId,
+      projectId: null,
+      actor: caller.userId,
+      data: { what: `${provider} key`, detail: key === null ? 'removed' : 'set' },
+    });
   }
 
   async usage(trx: Tx): Promise<AiUsageRow[]> {

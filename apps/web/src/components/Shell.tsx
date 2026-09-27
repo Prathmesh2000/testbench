@@ -38,7 +38,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
   { group: 'System', items: [
     { href: '/notifications', label: 'Notifications', icon: 'bell' },
     { href: '/settings', label: 'Settings', icon: 'gear' },
-    { href: '/soon/admin', label: 'Admin', icon: 'shield', soon: 'M5' },
+    { href: '/admin', label: 'Admin', icon: 'shield' },
   ] },
 ];
 

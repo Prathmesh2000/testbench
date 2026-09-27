@@ -126,6 +126,10 @@ services:
     image: node:24-alpine
     command: ["node", "/app/server.mjs"]
     ports: ["8091:8091"]
+    environment:
+      GATEWAY_URL: http://host.docker.internal:4200
+      SLACK_SIGNING_SECRET: local-dev-slack-signing-secret-0123
+    extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
       - ./provider-sandbox:/app:ro
     healthcheck:

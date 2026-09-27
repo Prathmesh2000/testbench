@@ -29,5 +29,17 @@ export const EVENT_TYPES = [
   'defect.status_changed',
   'retest.completed',
   'document.versioned',
+  'document.created',
+  'release.signed_off',
+  'member.invited',
+  'member.removed',
+  'role.saved',
+  'role.deleted',
+  'token.created',
+  'token.revoked',
+  'ai.config_changed',
+  'board.created',
+  'meeting.scheduled',
+  'action_item.converted',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];

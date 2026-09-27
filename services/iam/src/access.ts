@@ -1,7 +1,7 @@
 import type { Permission } from '@tb/contracts';
 import { forbidden, notFound, withTenant, type Db, type Tx } from '@tb/platform';
 import type { FastifyRequest } from 'fastify';
-import { permissionsFor } from './permissions';
+import { orgPermissions, permissionsFor } from './permissions';
 
 /**
  * Throws unless the caller's roles grant `permission` on the project.
@@ -19,7 +19,7 @@ export function requirePermission(req: FastifyRequest, projectId: string, permis
 
 /** Opens the request's tenant transaction (RLS scoped to the caller's organisation). */
 export function tenantTx<T>(db: Db, req: FastifyRequest, fn: (trx: Tx) => Promise<T>): Promise<T> {
-  return withTenant(db, { orgId: req.auth.orgId, userId: req.auth.userId }, fn);
+  return withTenant(db, { orgId: req.auth.orgId, userId: req.auth.userId, source: req.auth.source }, fn);
 }
 
 /**
@@ -44,4 +44,18 @@ export function projectTx<T>(
     if (!project) throw notFound('Project');
     return fn(trx);
   });
+}
+
+/**
+ * For organisation-level routes (the admin console): the permission must come from an org-wide role,
+ * since a project role says nothing about the rest of the organisation.
+ */
+export function orgTx<T>(
+  db: Db,
+  req: FastifyRequest,
+  permission: Permission,
+  fn: (trx: Tx) => Promise<T>,
+): Promise<T> {
+  if (!orgPermissions(req.auth.grants).includes(permission)) throw forbidden();
+  return tenantTx(db, req, fn);
 }

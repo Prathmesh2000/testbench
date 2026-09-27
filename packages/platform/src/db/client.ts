@@ -18,6 +18,8 @@ export function createDb(connectionString: string, max = 20): Db {
 export interface TenantContext {
   orgId: string;
   userId: string;
+  /** Where the change comes from (web, api, mcp, slack); stamped on outbox events for the audit log. */
+  source?: string;
 }
 
 /**
@@ -29,9 +31,8 @@ export interface TenantContext {
  */
 export function withTenant<T>(db: Db, ctx: TenantContext, fn: (trx: Tx) => Promise<T>): Promise<T> {
   return db.transaction().execute(async (trx) => {
-    await sql`SELECT set_config('app.org_id', ${ctx.orgId}, true), set_config('app.user_id', ${ctx.userId}, true)`.execute(
-      trx,
-    );
+    await sql`SELECT set_config('app.org_id', ${ctx.orgId}, true), set_config('app.user_id', ${ctx.userId}, true),
+                     set_config('app.source', ${ctx.source ?? ''}, true)`.execute(trx);
     return fn(trx);
   });
 }

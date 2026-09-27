@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { permissionsFor, visibleProjectIds, type Grant } from './permissions';
+import { orgPermissions, permissionsFor, ungrantable, visibleProjectIds, type Grant } from './permissions';
 
 const PAY = 'pay-project';
 const MOB = 'mob-project';
@@ -72,5 +72,28 @@ describe('visibleProjectIds', () => {
         { projectId: MOB, role: 'viewer' },
       ]),
     ).toEqual([PAY, MOB]);
+  });
+});
+
+describe('custom roles and org-level checks', () => {
+  it('uses the permissions a custom role carries', () => {
+    const grants: Grant[] = [
+      { projectId: null, role: 'custom:x', permissions: ['case.read', 'run.signoff'] },
+    ];
+    expect(permissionsFor(grants, PAY)).toEqual(['case.read', 'run.signoff']);
+  });
+
+  it('counts only org-wide roles for the admin console', () => {
+    const grants: Grant[] = [
+      { projectId: PAY, role: 'project_admin' },
+      { projectId: null, role: 'viewer' },
+    ];
+    expect(orgPermissions(grants)).toEqual(['case.read', 'run.read']);
+  });
+
+  it('refuses to grant what the caller lacks', () => {
+    expect(ungrantable(['case.read', 'member.manage'], ['case.read', 'role.manage'])).toEqual([
+      'role.manage',
+    ]);
   });
 });

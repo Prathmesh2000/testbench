@@ -9,6 +9,8 @@ export interface OutboxEvent {
   actor: string | null;
   occurredAt: Date;
   data: Record<string, unknown>;
+  /** web, api, mcp or slack: where the change came from. */
+  source: string;
 }
 
 /**
@@ -38,6 +40,7 @@ interface ClaimedRow {
   actor: string | null;
   occurred_at: Date;
   data: Record<string, unknown>;
+  source: string;
 }
 
 /** Delivers one batch of pending events. Returns how many were claimed, so callers know whether to idle. */
@@ -57,6 +60,7 @@ export async function relayBatch(
       actor: row.actor,
       occurredAt: row.occurred_at,
       data: row.data,
+      source: row.source,
     };
     let error: string | null = null;
     for (const consumer of consumers) {

@@ -242,6 +242,13 @@ export async function createDocument(
         })),
       )
       .execute();
+  await recordEvent(trx, {
+    type: 'document.created',
+    orgId: actor.orgId,
+    projectId,
+    actor: actor.userId,
+    data: { document_id: doc.id, title, requirements: extraction.requirements.length },
+  });
   return doc;
 }
 

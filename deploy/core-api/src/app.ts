@@ -4,13 +4,15 @@ import { defectRoutes, jiraWebhook, type JiraClient } from '@tb/defect';
 import { docsRoutes } from '@tb/docs';
 import { executionRoutes } from '@tb/execution';
 import { notifyRoutes, type NotifyClient } from '@tb/notify-client';
-import { authPlugin, iamRoutes } from '@tb/iam';
+import { adminRoutes, authPlugin, iamRoutes, type KeycloakAdmin } from '@tb/iam';
+import { auditRoutes } from '@tb/audit';
 import { installErrorHandler, type ServiceDeps, type TokenVerifier } from '@tb/platform';
 import { repositoryRoutes } from '@tb/repository';
 import { searchRoutes, type CaseIndex } from '@tb/search';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import { sql } from 'kysely';
+import { integrationRoutes } from './integrations';
 
 export interface AppOptions extends ServiceDeps {
   verify: TokenVerifier;
@@ -18,6 +20,10 @@ export interface AppOptions extends ServiceDeps {
   jira: JiraClient | null;
   notify: NotifyClient | null;
   ai: AiService;
+  keycloak: KeycloakAdmin | null;
+  /** For the Integrations tab. */
+  issuer: string;
+  gatewayUrl: string | null;
   webUrl: string;
   logLevel?: string;
 }
@@ -64,6 +70,9 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
         publicPaths: [],
       });
       await api.register(iamRoutes, deps);
+      await api.register(adminRoutes, { ...deps, keycloak: opts.keycloak });
+      await api.register(auditRoutes, deps);
+      await api.register(integrationRoutes, { ...deps, opts });
       await api.register(repositoryRoutes, deps);
       await api.register(executionRoutes, deps);
       await api.register(searchRoutes, { ...deps, index: opts.index });

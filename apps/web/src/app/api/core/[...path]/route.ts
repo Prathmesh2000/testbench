@@ -36,15 +36,17 @@ async function forward(req: NextRequest, { params }: Ctx): Promise<NextResponse>
 
   const { path } = await params;
   const target = `${coreApiUrl()}/api/v1/${path.map(encodeURIComponent).join('/')}${req.nextUrl.search}`;
-  const hasBody = req.method !== 'GET' && req.method !== 'HEAD';
+  // Only forward a content type with an actual body: Fastify rejects an empty body declared as JSON,
+  // which is what a bodiless DELETE or POST would otherwise send.
+  const body = req.method !== 'GET' && req.method !== 'HEAD' ? await req.text() : '';
   const upstream = await fetch(target, {
     method: req.method,
     headers: {
       authorization: `Bearer ${token}`,
-      ...(hasBody && { 'content-type': req.headers.get('content-type') ?? 'application/json' }),
+      ...(body && { 'content-type': req.headers.get('content-type') ?? 'application/json' }),
       'x-request-id': req.headers.get('x-request-id') ?? crypto.randomUUID(),
     },
-    body: hasBody ? await req.text() : undefined,
+    body: body || undefined,
     cache: 'no-store',
   });
 

@@ -1,6 +1,6 @@
 import { SignoffBody } from '@tb/contracts';
 import { projectTx } from '@tb/iam';
-import { AppError, type ServiceDeps } from '@tb/platform';
+import { AppError, recordEvent, type ServiceDeps } from '@tb/platform';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -75,6 +75,13 @@ export const analyticsRoutes: FastifyPluginAsync<ServiceDeps> = async (app, { db
             decided_by: req.auth.userId,
           })
           .execute();
+        await recordEvent(trx, {
+          type: 'release.signed_off',
+          orgId: req.auth.orgId,
+          projectId: req.params.projectId,
+          actor: req.auth.userId,
+          data: { build: req.body.build, decision: req.body.decision, note: req.body.note },
+        });
       });
       await cache.del(
         `analytics:${req.params.projectId}:readiness:${req.body.build}`,

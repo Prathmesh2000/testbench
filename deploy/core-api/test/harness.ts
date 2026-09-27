@@ -44,7 +44,7 @@ export interface Harness {
   projectId: string;
   otherProjectId: string;
   moduleIds: { auth: string; upi: string; collect: string };
-  users: { lead: TestUser; tester: TestUser; viewer: TestUser; outsider: TestUser };
+  users: { admin: TestUser; lead: TestUser; tester: TestUser; viewer: TestUser; outsider: TestUser };
   close(): Promise<void>;
 }
 
@@ -108,6 +108,7 @@ export async function startHarness(): Promise<Harness> {
     return { id, email, token: await sign(`sub-${role}-${run}`, email) };
   };
   const users = {
+    admin: await makeUser('org_admin', orgId),
     lead: await makeUser('test_lead', orgId),
     tester: await makeUser('tester', orgId),
     viewer: await makeUser('viewer', orgId),
@@ -180,6 +181,9 @@ export async function startHarness(): Promise<Harness> {
       models: { openai: 'm', anthropic: 'm', xai: 'm' },
       keySecret: 'test-secret-that-is-at-least-32-characters',
     }),
+    keycloak: null,
+    issuer: ISSUER,
+    gatewayUrl: null,
     webUrl: cfg.WEB_URL,
     logLevel: 'silent',
   });
@@ -202,6 +206,8 @@ export async function startHarness(): Promise<Harness> {
       await owner.transaction().execute(async (trx) => {
         await sql`SET LOCAL session_replication_role = replica`.execute(trx);
         for (const table of [
+          'audit.entry',
+          'iam.token',
           'ai.usage',
           'ai.config',
           'analytics.signoff',
@@ -232,6 +238,7 @@ export async function startHarness(): Promise<Harness> {
           'repo.module',
           'repo.project',
           'iam.membership',
+          'iam.custom_role',
         ]) {
           await sql`DELETE FROM ${sql.table(table)} WHERE org_id = ANY(${[orgId, otherOrgId]})`.execute(trx);
         }

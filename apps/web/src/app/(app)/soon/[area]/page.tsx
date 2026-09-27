@@ -3,7 +3,6 @@ import { Icon } from '@/components/Icon';
 const AREAS: Record<string, { title: string; milestone: string; what: string }> = {
   boards: { title: 'Boards', milestone: 'M5', what: 'Live documents, sheets and whiteboards.' },
   meetings: { title: 'Meetings', milestone: 'M5', what: 'Calendar scheduling, notes and action items that become cases or bugs.' },
-  admin: { title: 'Admin', milestone: 'M5', what: 'Members, the roles matrix, integrations, AI providers and the audit log.' },
 };
 
 export default async function Soon({ params }: { params: Promise<{ area: string }> }) {

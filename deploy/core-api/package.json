@@ -13,6 +13,7 @@
   "dependencies": {
     "@tb/ai": "workspace:*",
     "@tb/analytics": "workspace:*",
+    "@tb/audit": "workspace:*",
     "@tb/contracts": "workspace:*",
     "@tb/defect": "workspace:*",
     "@tb/docs": "workspace:*",

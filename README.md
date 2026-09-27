@@ -16,6 +16,8 @@ Built so far:
   PRDs with requirement extraction, version diff, traceability and change impact (linked cases flagged Needs review),
   and AI assist (draft cases from a requirement, edge-case suggestions) through one provider layer for OpenAI,
   Anthropic, xAI and offline Ollama, with per-task models, tenant policy, bring-your-own keys and token budgets.
+- **M5 (part 1)**: the admin console (members and invitations, custom roles with guardrails, integrations, AI
+  providers, the audit log), personal access tokens, the MCP server for Claude and other agents, and the Slack bot.
 
 ## Run it locally
 
@@ -28,7 +30,7 @@ pnpm infra:up             # Postgres, Valkey, Keycloak, S3, OpenSearch, Jira san
 pnpm db:migrate
 pnpm seed --size dev      # 1,00,000 cases; use --size demo for 1,000
 pnpm search:reindex       # builds the search index from Postgres (after every seed)
-pnpm dev                  # web :3000, core-api :4000, notification service :4100
+pnpm dev                  # web :3000, core-api :4000, notification service :4100, agent gateway :4200
 ```
 
 ```mermaid
@@ -73,6 +75,24 @@ flowchart LR
 PRDs whose paragraphs start with ids such as `REQ-AP-04` are read without AI and keep their ids across versions;
 other documents go through AI extraction.
 
+**Agents and Slack.** Create a personal access token in Settings → Access tokens, then connect Claude Code:
+
+```sh
+claude mcp add --transport http testbench http://localhost:4200/mcp --header "Authorization: Bearer tbp_…"
+```
+
+The gateway calls core-api with that token, so an agent can do exactly what its owner can, and every change it
+makes shows up in the audit log with source `mcp`. Slack commands (`/tcm login tbp_…`, `/tcm status RUN-3 PAY`,
+`/tcm run smoke PAY 8812`) can be tried without a Slack workspace at http://localhost:8091/slack-console.
+
+```mermaid
+flowchart LR
+  C[Claude / Cursor] -->|MCP, bearer tbp_| G[Agent gateway :4200]
+  S[Slack /tcm] -->|signed request| G
+  G -->|same token, x-tb-client| A[core-api]
+  A -->|outbox event, source mcp/slack| L[(audit.entry)]
+```
+
 ### Accounts
 
 All passwords are `Testbench@123` (local realm only).
@@ -102,8 +122,9 @@ The integration tests create their own organisations and users and delete them a
 |---|---|
 | `apps/web` | Next.js app. Screens live in `src/features/*`; design tokens in `src/app/globals.css` come from the Claude Design canvas |
 | `deploy/core-api` | The API process: mounts the service modules below (HLD §1.1) |
-| `services/iam`, `repository`, `execution`, `search`, `defect`, `analytics`, `docs`, `ai` | Service modules: routes, queries, and pure domain logic with unit tests |
+| `services/iam`, `repository`, `execution`, `search`, `defect`, `analytics`, `docs`, `ai`, `audit` | Service modules: routes, queries, and pure domain logic with unit tests |
 | `services/notification`, `deploy/notification-local` | The standalone notification service (its own DynamoDB and SQS) and its local process |
+| `deploy/agent-gateway` | MCP server and Slack bot; holds no data or permissions of its own |
 | `services/notify-client` | core-api's side: turns events into notifications, and the inbox, preferences and console routes |
 | `packages/tql` | The TQL query language: parser, autocomplete and highlighting, shared by API and web |
 | `packages/contracts` | Request schemas (Zod) and response types shared by API and web |

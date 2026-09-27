@@ -1,7 +1,9 @@
 import { fileURLToPath } from 'node:url';
 import { AiService } from '@tb/ai';
+import { auditConsumer } from '@tb/audit';
 import { JiraClient, startReconciler } from '@tb/defect';
 import { startRunPrepWorker } from '@tb/execution';
+import { KeycloakAdmin } from '@tb/iam';
 import { NotifyClient, notifier } from '@tb/notify-client';
 import {
   JsonCache,
@@ -56,6 +58,16 @@ const ai = new AiService(db, {
   keySecret: cfg.AI_KEY_SECRET ?? null,
 });
 
+const keycloak =
+  cfg.KEYCLOAK_ADMIN_URL && cfg.KEYCLOAK_ADMIN_USER && cfg.KEYCLOAK_ADMIN_PASSWORD
+    ? new KeycloakAdmin({
+        url: cfg.KEYCLOAK_ADMIN_URL,
+        realm: cfg.KEYCLOAK_REALM,
+        user: cfg.KEYCLOAK_ADMIN_USER,
+        password: cfg.KEYCLOAK_ADMIN_PASSWORD,
+      })
+    : null;
+
 // The cache logs through the app logger once it exists; before that there is nothing to warn about yet.
 const cacheLog = { warn: (obj: object, msg: string) => app.log.warn(obj, msg) };
 const cache = JsonCache.connect(cfg.VALKEY_URL, cacheLog);
@@ -68,6 +80,9 @@ const app = await buildApp({
   jira,
   notify,
   ai,
+  keycloak,
+  issuer: cfg.OIDC_ISSUER,
+  gatewayUrl: cfg.AGENT_GATEWAY_URL ?? null,
   webUrl: cfg.WEB_URL,
   logLevel: cfg.LOG_LEVEL,
 });
@@ -86,7 +101,7 @@ const stoppers = [
   startRunPrepWorker(db, app.log),
   startOutboxRelay(
     db,
-    [caseIndexer(index), ...(notify ? [notifier(notify, index, cfg.WEB_URL)] : [])],
+    [caseIndexer(index), auditConsumer, ...(notify ? [notifier(notify, index, cfg.WEB_URL)] : [])],
     app.log,
   ),
   async () => stopReconciler(),

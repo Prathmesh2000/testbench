@@ -204,6 +204,7 @@ export interface OutboxEventTable {
   attempts: Generated<number>;
   last_error: string | null;
   dead_at: NullableTimestamp;
+  source: Generated<string>;
 }
 
 export interface ProcessedEventTable {
@@ -402,6 +403,91 @@ export interface AiUsageTable {
   created_at: Timestamp;
 }
 
+export interface CustomRoleTable {
+  id: Generated<string>;
+  org_id: string;
+  name: string;
+  based_on: string;
+  permissions: string[];
+  version: Generated<number>;
+  updated_by: string;
+  updated_at: Timestamp;
+}
+
+export interface TokenTable {
+  id: Generated<string>;
+  org_id: string;
+  user_id: string;
+  name: string;
+  token_hash: string;
+  prefix: string;
+  scopes: string[];
+  expires_at: Timestamp;
+  last_used_at: NullableTimestamp;
+  revoked_at: NullableTimestamp;
+  created_at: Timestamp;
+}
+
+export interface AuditEntryTable {
+  id: string;
+  org_id: string;
+  project_id: string | null;
+  at: Timestamp;
+  actor_id: string | null;
+  source: string;
+  action: string;
+  entity: string;
+  details: string;
+  data: ColumnType<unknown, string, string>;
+}
+
+export interface BoardTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  kind: string;
+  title: string;
+  created_by: string;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+  archived: Generated<boolean>;
+}
+
+export interface BoardStateTable {
+  board_id: string;
+  org_id: string;
+  state: Buffer;
+  updated_at: Timestamp;
+}
+
+export interface MeetingTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  title: string;
+  starts_at: Timestamp;
+  minutes: number;
+  attendees: Generated<string[]>;
+  context: string | null;
+  notes_board: string;
+  calendar: Generated<string>;
+  calendar_id: string | null;
+  created_by: string;
+  created_at: Timestamp;
+}
+
+export interface ActionItemTable {
+  id: Generated<string>;
+  org_id: string;
+  meeting_id: string;
+  text: string;
+  assignee_id: string | null;
+  status: Generated<string>;
+  converted_to: string | null;
+  created_by: string;
+  created_at: Timestamp;
+}
+
 export interface Database {
   'iam.org': OrgTable;
   'iam.app_user': AppUserTable;
@@ -435,4 +521,11 @@ export interface Database {
   'analytics.signoff': SignoffTable;
   'ai.config': AiConfigTable;
   'ai.usage': AiUsageTable;
+  'iam.custom_role': CustomRoleTable;
+  'iam.token': TokenTable;
+  'audit.entry': AuditEntryTable;
+  'collab.board': BoardTable;
+  'collab.board_state': BoardStateTable;
+  'meet.meeting': MeetingTable;
+  'meet.action_item': ActionItemTable;
 }
