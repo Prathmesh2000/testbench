@@ -15,7 +15,7 @@ import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from 'jose';
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import pg from 'pg';
 import { JiraClient } from '@tb/defect';
-import { CaseIndex } from '@tb/search';
+import { CaseIndex, ensurePercolator } from '@tb/search';
 import { buildApp } from '../src/app';
 
 // Integration harness: the real app on the local Docker stack (see README), with a locally signed token
@@ -154,6 +154,8 @@ export async function startHarness(): Promise<Harness> {
 
   const index = new CaseIndex(cfg.OPENSEARCH_URL);
   await index.ensure();
+  // As in server.ts: otherwise a filter subscription would auto-create this index with the wrong mapping.
+  await ensurePercolator(index);
   const jira = new JiraClient({
     baseUrl: cfg.JIRA_BASE_URL!,
     email: cfg.JIRA_EMAIL!,
