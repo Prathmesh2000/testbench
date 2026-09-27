@@ -285,11 +285,14 @@ export async function similarDefects(
         known: true,
       });
   }
-  return [...candidates.values()]
-    .map((c) => ({ ...c, similarity: Math.round(similarity(summary, c.summary) * 100) }))
-    .filter((c) => c.similarity >= 10)
-    .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, 5);
+  return (
+    [...candidates.values()]
+      .map((c) => ({ ...c, similarity: Math.round(similarity(summary, c.summary) * 100) }))
+      // Below ~30% the overlap is mostly shared words like "payment"; showing those buries real duplicates.
+      .filter((c) => c.similarity >= 30)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 5)
+  );
 }
 
 export async function syncStatus(trx: Tx, projectId: string): Promise<SyncStatus> {

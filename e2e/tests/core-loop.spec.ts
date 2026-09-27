@@ -59,3 +59,60 @@ test('tester core loop', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('link', { name: new RegExp(`E2E run ${unique}`) })).toBeVisible();
 });
+
+// M2: search a case with TQL, fail it, log the bug to Jira, have "the developer" fix it in the Jira
+// sandbox (its signed webhook reaches core-api), then retest it from the Defects retest queue.
+test('search, log bug, fix in Jira, retest', async ({ page, request }) => {
+  const title = `Verify wallet top-up limit e2e ${unique}`;
+  await signIn(page);
+
+  await page.goto('/cases?new=1');
+  const dialog = page.getByRole('dialog', { name: 'New test case' });
+  await dialog.getByLabel('Title').fill(title);
+  await dialog.getByLabel('Step 1 action').fill('Top up the wallet with ₹2,00,001');
+  await dialog.getByLabel('Step 1 expected result').fill('Top-up is refused above the KYC limit');
+  await dialog.getByRole('button', { name: 'Create case' }).click();
+  const caseKey = (await page.getByRole('complementary', { name: /^Case TC-/ }).getAttribute('aria-label'))!.replace('Case ', '');
+
+  // TQL search finds it once the indexer has caught up.
+  await expect(async () => {
+    await page.goto(`/search?q=${encodeURIComponent(`key = ${caseKey}`)}`);
+    await expect(page.getByRole('link', { name: new RegExp(caseKey) })).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Create run from results' }).click();
+  await page.getByLabel('Run name').fill(`E2E defect run ${unique}`);
+  await page.getByLabel('Build').fill('8812');
+  await page.getByText('Sneha Iyer').click();
+  await page.getByRole('button', { name: /Create run with 1 items/ }).click();
+
+  await page.getByRole('button', { name: 'Failed step 1' }).click();
+  await page.getByLabel(/Actual result/).fill('Top-up of ₹2,00,001 went through');
+  await page.getByLabel(/Actual result/).press('Enter');
+  await page.locator('body').press('Control+Shift+B');
+  const bug = page.getByRole('dialog', { name: 'Log bug' });
+  await bug.getByLabel('Summary').fill(`Wallet top-up above the KYC limit is accepted ${unique}`);
+  await bug.getByRole('button', { name: 'Create in Jira' }).click();
+  const toast = page.getByRole('status').filter({ hasText: /created in Jira/ });
+  await expect(toast).toBeVisible();
+  const jiraKey = (await toast.textContent())!.match(/[A-Z]+-\d+/)![0];
+
+  // The developer marks it Done in Jira; the sandbox sends a signed webhook to core-api.
+  const auth = { Authorization: `Basic ${Buffer.from('qa@paytrail.in:jira-sandbox-token').toString('base64')}` };
+  await request.post(`http://localhost:8090/rest/api/3/issue/${jiraKey}/transitions`, { headers: auth, data: { transition: { id: '41' } } });
+
+  await page.goto('/defects');
+  await page.getByRole('tab', { name: /Retest queue/ }).click();
+  await expect(async () => {
+    await page.reload();
+    await page.getByRole('tab', { name: /Retest queue/ }).click();
+    await expect(page.getByRole('row', { name: new RegExp(jiraKey) })).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 20_000 });
+  await page.getByRole('row', { name: new RegExp(jiraKey) }).click();
+  await page.getByRole('button', { name: 'Passed' }).click();
+  await page.getByLabel('Build you retested on').fill('8815');
+  await page.getByRole('button', { name: 'Record retest' }).click();
+  await expect(page.getByRole('status').filter({ hasText: /Verified/ })).toBeVisible();
+
+  const issue = await (await request.get(`http://localhost:8090/rest/api/3/issue/${jiraKey}`, { headers: auth })).json();
+  expect(JSON.stringify(issue.fields.comment)).toContain('passes on build 8815');
+});

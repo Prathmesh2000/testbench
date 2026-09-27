@@ -23,10 +23,10 @@ const NAV: { group: string; items: NavItem[] }[] = [
     { href: '/', label: 'Home', icon: 'home' },
     { href: '/cases', label: 'Test cases', icon: 'cases' },
     { href: '/runs', label: 'Runs', icon: 'runs' },
-    { href: '/soon/defects', label: 'Defects', icon: 'bug', soon: 'M2' },
+    { href: '/defects', label: 'Defects', icon: 'bug' },
   ] },
   { group: 'Explore', items: [
-    { href: '/soon/search', label: 'Search', icon: 'search', soon: 'M2' },
+    { href: '/search', label: 'Search', icon: 'search' },
     { href: '/soon/analytics', label: 'Analytics', icon: 'chart', soon: 'M4' },
   ] },
   { group: 'Knowledge', items: [

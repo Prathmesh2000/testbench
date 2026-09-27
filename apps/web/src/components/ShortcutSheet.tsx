@@ -5,7 +5,7 @@ import { Icon } from './Icon';
 const GROUPS: { title: string; keys: [string, string[]][] }[] = [
   { title: 'Global', keys: [
     ['Command palette', ['Ctrl', 'K']], ['Search', ['/']], ['Shortcuts', ['?']], ['Go home', ['g', 'h']],
-    ['Go to test cases', ['g', 'c']], ['Go to runs', ['g', 'r']], ['New run', ['g', 'n']], ['Close', ['Esc']],
+    ['Go to test cases', ['g', 'c']], ['Go to runs', ['g', 'r']], ['Search page', ['g', 's']], ['Defects', ['g', 'd']], ['New run', ['g', 'n']], ['Close', ['Esc']],
   ] },
   { title: 'Test cases', keys: [
     ['Next / previous row', ['J', 'K']], ['Open in drawer', ['Enter']], ['Open full page', ['O']], ['Select row', ['X']],

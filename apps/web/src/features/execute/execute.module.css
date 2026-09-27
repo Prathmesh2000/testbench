@@ -46,6 +46,8 @@
 .thumb { width: 96px; flex: none; display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; color: var(--text2) !important; text-decoration: none !important; }
 .thumb img, .thumb > svg { width: 96px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); background: var(--panel); }
 .thumb > svg { padding: 20px 38px; }
+.bugl { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12.5px; color: var(--text) !important; text-decoration: none !important; }
+.bugl:hover { background: var(--hover); }
 .abar { height: 48px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-top: 1px solid var(--border); background: var(--panel); }
 
 .info { width: 300px; flex: none; background: var(--panel); overflow: auto; min-height: 0; border-left: 1px solid var(--border); }

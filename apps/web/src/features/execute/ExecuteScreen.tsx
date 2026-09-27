@@ -2,7 +2,7 @@
 
 import {
   EVIDENCE_MAX_BYTES, EVIDENCE_TYPES,
-  type EvidenceUpload, type RecordableResult, type RecordResultResponse, type Result, type RunItemDetail, type RunItemRow, type RunSummary,
+  type DefectRow, type EvidenceUpload, type RecordableResult, type RecordResultResponse, type Result, type RunItemDetail, type RunItemRow, type RunSummary,
 } from '@tb/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -14,6 +14,7 @@ import { Avatar, Avatars, PriorityTag, ResultStatus, resultLabel, StackedBar } f
 import { api, ApiError, get } from '@/lib/api';
 import { bytes, clock, dateTimeIST, fmt } from '@/lib/format';
 import { executeAction, isTypingTarget } from '@/lib/keys';
+import { JiraStatus } from '../defects/defect-bits';
 import { LogBugDialog } from './LogBugDialog';
 import s from './execute.module.css';
 
@@ -28,8 +29,17 @@ export function ExecuteScreen({ runId }: { runId: string }) {
   const { notify } = useToast();
   const base = `/projects/${project.id}/runs/${runId}`;
 
-  const run = useQuery({ queryKey: ['run', runId], queryFn: () => get<RunSummary>(base) });
-  const items = useQuery({ queryKey: ['run-items', runId], queryFn: () => get<RunItemRow[]>(`${base}/items`) });
+  const run = useQuery({
+    queryKey: ['run', runId],
+    queryFn: () => get<RunSummary>(base),
+    // A run being prepared in the background gains items every few seconds.
+    refetchInterval: (q) => (q.state.data?.status === 'preparing' ? 3000 : false),
+  });
+  const items = useQuery({
+    queryKey: ['run-items', runId],
+    queryFn: () => get<RunItemRow[]>(`${base}/items`),
+    refetchInterval: run.data?.status === 'preparing' ? 3000 : false,
+  });
   const [itemId, setItemId] = useState<string | null>(params.get('item'));
   const [filter, setFilter] = useState<Result | 'all'>('all');
   const [search, setSearch] = useState('');
@@ -251,6 +261,9 @@ export function ExecuteScreen({ runId }: { runId: string }) {
                 {item.needsReview && (
                   <div className="banner warn" role="status"><Icon name="alert" size={16} /><div className="f1"><b>This case is marked Needs review.</b> Its steps may be out of date; check with <Link href={`/cases/${item.caseKey}`}>the case</Link> before failing it.</div></div>
                 )}
+                {run.data?.status === 'preparing' && (
+                  <div className="banner info" role="status"><Icon name="refresh" size={16} className="spin" />Preparing this run: {fmt(items.data?.length ?? 0)} of {fmt(run.data.counts.total)} items ready. You can start on them now.</div>
+                )}
                 {readOnly && <div className="banner info"><Icon name="info" size={16} />{run.data?.status === 'completed' ? 'This run is completed, so results are read-only.' : 'You can view this run but not record results.'}</div>}
 
                 <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
@@ -379,16 +392,38 @@ export function ExecuteScreen({ runId }: { runId: string }) {
                   </div>
                 ))}
               </div>
-              <div className={s.infoSec}>
-                <div className="sec">Defects</div>
-                <div className="t3" style={{ fontSize: 12, marginTop: 6, lineHeight: 1.5 }}>Jira linking and bug sync arrive in M2. Until then, <button className="link" onClick={() => setBugOpen(true)}>copy the bug report</button> from here.</div>
-              </div>
+              <LinkedBugs caseId={item.caseId} onLog={() => setBugOpen(true)} />
             </>
           )}
         </aside>
       </div>
 
       {bugOpen && item && run.data && <LogBugDialog item={item} run={run.data} onClose={() => setBugOpen(false)} />}
+    </div>
+  );
+}
+
+/** Bugs already linked to this case, newest first, so a tester can see a known failure before logging it again. */
+function LinkedBugs({ caseId, onLog }: { caseId: string; onLog(): void }) {
+  const { project } = useSession();
+  const bugs = useQuery({
+    queryKey: ['defects', project.id, 'case', caseId],
+    queryFn: () => get<DefectRow[]>(`/projects/${project.id}/defects?caseId=${caseId}`),
+    retry: false,
+  });
+  return (
+    <div className={s.infoSec}>
+      <div className="sec">Bugs on this case</div>
+      {bugs.error && <div className="t3" style={{ fontSize: 12, marginTop: 6 }}>{bugs.error instanceof ApiError ? bugs.error.message : 'Could not load bugs.'}</div>}
+      {bugs.data?.length === 0 && <div className="t3" style={{ fontSize: 12, marginTop: 6 }}>No bugs linked. <button className="link" onClick={onLog}>Log one</button></div>}
+      <div className="col" style={{ gap: 6, marginTop: 8 }}>
+        {bugs.data?.map((b) => (
+          <a key={b.id} className={s.bugl} href={b.jiraUrl} target="_blank" rel="noreferrer">
+            <span className="row" style={{ gap: 6 }}><span className="mono">{b.jiraKey}</span><JiraStatus status={b.status} category={b.statusCategory} /></span>
+            <span style={{ lineHeight: 1.4 }}>{b.summary}</span>
+          </a>
+        ))}
+      </div>
     </div>
   );
 }

@@ -22,7 +22,7 @@ export type GlobalAction =
   | { type: 'go'; to: string }
   | { type: 'pending-g' };
 
-const GO_TARGETS: Record<string, string> = { h: '/', c: '/cases', r: '/runs', n: '/runs/new' };
+const GO_TARGETS: Record<string, string> = { h: '/', c: '/cases', r: '/runs', n: '/runs/new', s: '/search', d: '/defects' };
 
 /**
  * App-wide shortcuts. `pendingG` is true right after the user pressed "g", which starts a two-key

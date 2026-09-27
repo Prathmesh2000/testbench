@@ -54,6 +54,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       { id: 'go-home', label: 'Go to Home', icon: 'home', hint: 'g h', run: go('/') },
       { id: 'go-cases', label: 'Go to Test cases', icon: 'cases', hint: 'g c', run: go('/cases') },
       { id: 'go-runs', label: 'Go to Runs', icon: 'runs', hint: 'g r', run: go('/runs') },
+      { id: 'go-search', label: 'Search with TQL', icon: 'search', hint: 'g s', run: go(`/search${q ? `?q=${encodeURIComponent(query.trim())}` : ''}`) },
+      { id: 'go-defects', label: 'Go to Defects', icon: 'bug', hint: 'g d', run: go('/defects') },
       { id: 'new-run', label: 'Create a run', icon: 'plus', hint: 'g n', run: go('/runs/new') },
       { id: 'new-case', label: 'New test case', icon: 'plus', run: go('/cases?new=1') },
       { id: 'theme', label: `Switch to ${prefs.theme === 'dark' ? 'light' : 'dark'} theme`, icon: prefs.theme === 'dark' ? 'sun' : 'moon', run: () => { prefs.toggleTheme(); onClose(); } },

@@ -44,6 +44,7 @@ const PATHS = {
   edit: 'M11 2.5 13.5 5 6 12.5H3.5V10z',
   history: 'M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.5V5H5M8 5v3l2 1.5',
   tree: 'M3 2.5h4v3H3zM9 10.5h4v3H9zM9 2.5h4v3H9zM5 5.5v6.5h4M7 4h2',
+  plug: 'M6 1.5v3M10 1.5v3M4 4.5h8v3a4 4 0 0 1-8 0zM8 11.5v3',
 } as const;
 
 export type IconName = keyof typeof PATHS;

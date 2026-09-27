@@ -8,7 +8,7 @@ if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 
 const config: NextConfig = {
   // Workspace packages ship TypeScript source, not built JS.
-  transpilePackages: ['@tb/contracts'],
+  transpilePackages: ['@tb/contracts', '@tb/tql'],
   poweredByHeader: false,
   // Next.js otherwise writes AGENTS.md / CLAUDE.md into the app folder on every dev start.
   agentRules: false,

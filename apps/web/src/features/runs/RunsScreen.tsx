@@ -61,7 +61,7 @@ export function RunsScreen() {
                   </td>
                   <td className="num" style={{ textAlign: 'right' }}>{passRate === null ? '—' : `${passRate}%`}</td>
                   <td><Avatars users={r.assignees} /></td>
-                  <td className="t3">{r.status === 'completed' ? 'Completed' : r.dueAt ? dateTimeIST(r.dueAt) : '—'}</td>
+                  <td className="t3">{r.status === 'preparing' ? <span className="row acc" style={{ gap: 5 }}><Icon name="refresh" size={12} className="spin" />Preparing…</span> : r.status === 'completed' ? 'Completed' : r.dueAt ? dateTimeIST(r.dueAt) : '—'}</td>
                 </tr>
               );
             })}

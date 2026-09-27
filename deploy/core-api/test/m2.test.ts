@@ -291,6 +291,14 @@ describe('defects and Jira', () => {
 
   it('repairs a missed webhook with the reconciler', async () => {
     await h.jira.transitionTo(defect.jiraKey, 'In Progress');
+    // The sandbox also sends a real webhook to a locally running core-api. Let it land, then roll our
+    // copy back to simulate that webhook having been lost, so the reconciler has something to repair.
+    await new Promise((r) => setTimeout(r, 500));
+    await h.owner
+      .updateTable('defect.defect')
+      .set({ status: 'To Do', status_category: 'new' })
+      .where('id', '=', defect.id)
+      .execute();
     const res = await call<{ changed: number }>(h, h.users.tester, 'POST', `${base()}/defects/sync`);
     expect(res.body.changed).toBeGreaterThanOrEqual(1);
     const row = (await call<DefectRow[]>(h, h.users.tester, 'GET', `${base()}/defects`)).body.find(
