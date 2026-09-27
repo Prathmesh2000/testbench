@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "testbench",
+      "credentials": [{ "accessKey": "testbench", "secretKey": "testbench-dev-secret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

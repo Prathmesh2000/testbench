@@ -1,0 +1,32 @@
+{
+  "name": "@tb/core-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/server.ts",
+    "start": "tsx src/server.ts",
+    "reindex": "tsx src/reindex.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint src test"
+  },
+  "dependencies": {
+    "@tb/contracts": "workspace:*",
+    "@tb/defect": "workspace:*",
+    "@tb/execution": "workspace:*",
+    "@tb/iam": "workspace:*",
+    "@tb/platform": "workspace:*",
+    "@tb/repository": "workspace:*",
+    "@tb/search": "workspace:*",
+    "fastify": "^5.12.5",
+    "fastify-type-provider-zod": "^7.0.0",
+    "kysely": "^0.29.6",
+    "pg": "^8.23.0",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.0",
+    "jose": "^6.2.12",
+    "vitest": "^5.0.2"
+  }
+}

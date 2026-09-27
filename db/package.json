@@ -1,0 +1,20 @@
+{
+  "name": "@tb/db",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "migrate": "tsx src/migrate.ts",
+    "seed": "tsx src/seed.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "kysely": "^0.29.6",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.0",
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.2"
+  }
+}

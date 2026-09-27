@@ -1,0 +1,26 @@
+{
+  "name": "@tb/search",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@opensearch-project/opensearch": "^3.9.0",
+    "@tb/contracts": "workspace:*",
+    "@tb/iam": "workspace:*",
+    "@tb/platform": "workspace:*",
+    "@tb/repository": "workspace:*",
+    "@tb/tql": "workspace:*",
+    "fastify": "^5.12.5",
+    "fastify-type-provider-zod": "^7.0.0",
+    "kysely": "^0.29.6",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.2"
+  }
+}

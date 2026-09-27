@@ -1,0 +1,17 @@
+{
+  "name": "@tb/tql",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@tb/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.2"
+  }
+}

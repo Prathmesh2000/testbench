@@ -1,0 +1,111 @@
+# Local stack, "core" profile from HLD §10.2. Everything the M1 services talk to runs here;
+# the Node services and Next.js run on the host for fast reloads.
+name: testbench
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: testbench
+      POSTGRES_USER: tb_owner
+      POSTGRES_PASSWORD: tb_owner_dev
+    ports: ["5433:5432"]  # 5432 is often taken by other local projects
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    command: ["postgres", "-c", "shared_buffers=512MB", "-c", "max_connections=200"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tb_owner -d testbench"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  valkey:
+    image: valkey/valkey:8
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    command: ["start-dev", "--import-realm", "--health-enabled=true"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: "8080"
+    ports: ["8080:8080"]
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      # The image has no curl; bash's /dev/tcp is enough to probe the management health endpoint.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  # S3-compatible object store for evidence. SeaweedFS rather than MinIO: MinIO no longer publishes
+  # community images. The app only speaks the S3 API, so swapping stores is a config change.
+  s3:
+    image: chrislusf/seaweedfs:latest
+    command: ["server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/etc/seaweedfs/s3.json", "-s3.allowedOrigins=http://localhost:3000"]
+    ports: ["9000:8333"]
+    volumes:
+      - s3data:/data
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9333/cluster/status"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["8025:8025", "1025:1025"]
+
+  # Search index for TQL (HLD §6). Single node with the security plugin off: local only, nothing
+  # outside this machine can reach it. Production uses the managed service over TLS.
+  opensearch:
+    image: opensearchproject/opensearch:3.8.0
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"
+    ports: ["9200:9200"]
+    volumes:
+      - osdata:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=2s"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  # Stand-in for Jira Cloud (HLD §10): the subset of the REST API Testbench uses, plus a page at
+  # http://localhost:8090 to move bugs between statuses, which sends Jira-style webhooks to core-api.
+  jira:
+    image: node:24-alpine
+    command: ["node", "/app/server.mjs"]
+    environment:
+      JIRA_SANDBOX_TOKEN: jira-sandbox-token
+      JIRA_WEBHOOK_URL: http://host.docker.internal:4000/webhooks/jira
+      JIRA_WEBHOOK_SECRET: jira-sandbox-webhook-secret
+      JIRA_DATA: /data/issues.json
+    ports: ["8090:8090"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes:
+      - ./jira-sandbox:/app:ro
+      - jiradata:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8090/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
+  s3data:
+  osdata:
+  jiradata:

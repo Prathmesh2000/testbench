@@ -1,0 +1,41 @@
+/* Search, from the canvas artboards Search*.dc.html. */
+.layout { flex: 1; display: flex; min-height: 0; }
+.side { width: 230px; flex: none; background: var(--panel); border-right: 1px solid var(--border); padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; overflow: auto; }
+.sf { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 5px; border: 0; background: transparent; width: 100%; text-align: left; cursor: pointer; font-size: 12.5px; color: var(--text2); }
+.sf:hover { background: var(--hover); color: var(--text); }
+.sf.on { background: var(--accent-soft); color: var(--text); font-weight: 500; }
+.c { margin-left: auto; color: var(--text3); }
+.head { padding: 14px 18px 12px; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; flex: none; }
+.actions { display: flex; align-items: center; height: 42px; padding: 0 18px; gap: 6px; background: var(--panel); border-bottom: 1px solid var(--soft); flex: none; }
+.results { flex: 1; overflow: auto; background: var(--panel); }
+
+.ed { position: relative; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.ed:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.ed.err { border-color: var(--failed); }
+.ed .edl, .ed .edt { font-family: var(--font-mono), monospace; font-size: 14px; line-height: 1.7; padding: 12px 14px; white-space: pre-wrap; word-break: break-word; min-height: 88px; margin: 0; letter-spacing: 0; }
+/* `.ed .edt` outranks the global `.tb textarea { font: inherit; color: inherit }`, which would otherwise show the raw text on top of the highlighted copy. */
+.ed .edt { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; outline: none; resize: none; background: transparent; color: transparent; caret-color: var(--text); }
+.kw { color: var(--kw); font-weight: 500; }
+.fd { color: var(--accent); }
+.sv { color: var(--str); }
+.op { color: var(--text3); }
+.bad { color: var(--failed); text-decoration: underline wavy var(--failed); text-underline-offset: 3px; }
+
+.ac { position: absolute; z-index: 20; left: 14px; top: 100%; margin-top: 4px; width: 420px; max-width: calc(100% - 28px); background: var(--raised); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); padding: 4px; }
+.aci { display: flex; align-items: center; gap: 10px; width: 100%; height: 30px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; cursor: pointer; text-align: left; font-size: 12.5px; color: var(--text); }
+.aci.on, .aci:hover { background: var(--accent-soft); }
+.ty { margin-left: auto; font-size: 11px; color: var(--text3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+.rg > summary { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 14px; background: var(--raised); border-bottom: 1px solid var(--soft); font-size: 12.5px; font-weight: 600; position: sticky; top: 0; z-index: 1; cursor: pointer; list-style: none; }
+.rg > summary::-webkit-details-marker { display: none; }
+.chev { color: var(--text3); transition: transform .15s; }
+.rg[open] > summary .chev { transform: rotate(90deg); }
+.res { display: grid; grid-template-columns: 84px minmax(0, 1fr) 110px 40px 170px; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--soft); font-size: 12.5px; align-items: start; color: var(--text) !important; text-decoration: none !important; }
+.res:hover { background: var(--hover); }
+.res mark { background: rgba(214, 162, 62, .28); color: inherit; border-radius: 2px; padding: 0 1px; }
+
+@media (max-width: 860px) {
+  .side { display: none; }
+  .res { grid-template-columns: 76px minmax(0, 1fr) 40px; }
+  .res > :nth-child(3), .res > :nth-child(5) { display: none; }
+}
