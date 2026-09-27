@@ -104,7 +104,38 @@ services:
       timeout: 3s
       retries: 30
 
+  # Notification service stores (HLD §1 #12, §10): DynamoDB and SQS, both local stand-ins with the same
+  # APIs as AWS. The service talks to them through the AWS SDK with an endpoint override, nothing else.
+  dynamodb:
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/home/dynamodblocal/data"]
+    user: root
+    ports: ["8000:8000"]
+    volumes:
+      - dynamodata:/home/dynamodblocal/data
+
+  sqs:
+    image: softwaremill/elasticmq-native:latest
+    ports: ["9324:9324", "9325:9325"]
+    volumes:
+      - ./elasticmq/elasticmq.conf:/opt/elasticmq.conf:ro
+
+  # Captures what would go to Slack, Teams, Discord and SMS providers, with a page at
+  # http://localhost:8091 to read it. Point a channel at a real webhook URL to send for real.
+  providers:
+    image: node:24-alpine
+    command: ["node", "/app/server.mjs"]
+    ports: ["8091:8091"]
+    volumes:
+      - ./provider-sandbox:/app:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8091/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
 volumes:
+  dynamodata:
   pgdata:
   s3data:
   osdata:

@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { JiraClient, startReconciler } from '@tb/defect';
 import { startRunPrepWorker } from '@tb/execution';
+import { NotifyClient, notifier } from '@tb/notify-client';
 import {
   JsonCache,
   ObjectStorage,
@@ -12,7 +13,7 @@ import {
   startOutboxRelay,
 } from '@tb/platform';
 import { startBulkWorker } from '@tb/repository';
-import { CaseIndex, caseIndexer } from '@tb/search';
+import { CaseIndex, caseIndexer, ensurePercolator } from '@tb/search';
 import { buildApp } from './app';
 
 loadEnvFileIfPresent(fileURLToPath(new URL('../../../.env', import.meta.url)));
@@ -42,6 +43,9 @@ const jira =
       })
     : null;
 
+const notify =
+  cfg.NOTIFY_URL && cfg.NOTIFY_SERVICE_KEY ? new NotifyClient(cfg.NOTIFY_URL, cfg.NOTIFY_SERVICE_KEY) : null;
+
 // The cache logs through the app logger once it exists; before that there is nothing to warn about yet.
 const cacheLog = { warn: (obj: object, msg: string) => app.log.warn(obj, msg) };
 const cache = JsonCache.connect(cfg.VALKEY_URL, cacheLog);
@@ -52,20 +56,27 @@ const app = await buildApp({
   verify,
   index,
   jira,
+  notify,
   webUrl: cfg.WEB_URL,
   logLevel: cfg.LOG_LEVEL,
 });
 if (!jira) app.log.warn('Jira is not configured; defect features are disabled');
+if (!notify) app.log.warn('The notification service is not configured; notifications are not sent');
 
 await storage.ensureBucket();
 await index.ensure();
+await ensurePercolator(index);
 const stopReconciler = jira
   ? startReconciler(db, jira, app.log, cfg.JIRA_RECONCILE_MINUTES * 60_000)
   : () => {};
 const stoppers = [
   startBulkWorker(db, app.log),
   startRunPrepWorker(db, app.log),
-  startOutboxRelay(db, [caseIndexer(index)], app.log),
+  startOutboxRelay(
+    db,
+    [caseIndexer(index), ...(notify ? [notifier(notify, index, cfg.WEB_URL)] : [])],
+    app.log,
+  ),
   async () => stopReconciler(),
 ];
 

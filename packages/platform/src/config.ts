@@ -20,6 +20,9 @@ const Config = z.object({
   JIRA_EMAIL: z.string().min(1).optional(),
   JIRA_API_TOKEN: z.string().min(1).optional(),
   JIRA_WEBHOOK_SECRET: z.string().min(16).optional(),
+  // The notification service (optional, like Jira): without it, notifications are simply not sent.
+  NOTIFY_URL: z.url().optional(),
+  NOTIFY_SERVICE_KEY: z.string().min(24).optional(),
   /** Minutes between reconcile passes (HLD §5.4). */
   JIRA_RECONCILE_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),

@@ -39,7 +39,7 @@ export interface CaseDocument {
   last_run_at: string | null;
 }
 
-const MAPPINGS = {
+export const MAPPINGS = {
   dynamic: 'strict',
   properties: {
     org_id: { type: 'keyword' },

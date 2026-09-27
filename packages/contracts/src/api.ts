@@ -483,7 +483,10 @@ export const LogBugBody = z.object({
 export const LinkBugBody = z.object({
   runId: z.uuid(),
   itemId: z.uuid(),
-  jiraKey: z.string().trim().regex(/^[A-Z][A-Z0-9]{0,9}-\d+$/i, 'Use a Jira key such as PAY-4938'),
+  jiraKey: z
+    .string()
+    .trim()
+    .regex(/^[A-Z][A-Z0-9]{0,9}-\d+$/i, 'Use a Jira key such as PAY-4938'),
 });
 
 export const RetestBody = z
@@ -492,7 +495,10 @@ export const RetestBody = z
     build: z.string().trim().min(1).max(60),
     note: z.string().trim().max(2000).optional(),
   })
-  .refine((b) => b.status === 'passed' || !!b.note, { message: 'Say what still fails, so the developer can see it in Jira', path: ['note'] });
+  .refine((b) => b.status === 'passed' || !!b.note, {
+    message: 'Say what still fails, so the developer can see it in Jira',
+    path: ['note'],
+  });
 
 export const DefectListQuery = z.object({
   view: z.enum(['all', 'retest', 'mine']).default('all'),

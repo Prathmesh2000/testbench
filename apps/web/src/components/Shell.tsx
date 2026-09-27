@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { globalAction, isTypingTarget } from '@/lib/keys';
+import { BellMenu, useInbox } from './BellMenu';
 import { CommandPalette } from './CommandPalette';
 import { Icon, type IconName } from './Icon';
 import { useJobs, usePrefs, useSession } from './providers';
@@ -35,7 +36,8 @@ const NAV: { group: string; items: NavItem[] }[] = [
     { href: '/soon/meetings', label: 'Meetings', icon: 'calendar', soon: 'M5' },
   ] },
   { group: 'System', items: [
-    { href: '/soon/notifications', label: 'Notifications', icon: 'bell', soon: 'M3' },
+    { href: '/notifications', label: 'Notifications', icon: 'bell' },
+    { href: '/settings', label: 'Settings', icon: 'gear' },
     { href: '/soon/admin', label: 'Admin', icon: 'shield', soon: 'M5' },
   ] },
 ];
@@ -85,6 +87,7 @@ export function Shell({ children }: { children: ReactNode }) {
   useEffect(() => setNavOpen(false), [pathname]);
 
   const running = jobs.find((j) => j.status === 'queued' || j.status === 'running');
+  const unread = useInbox().data?.unread ?? 0;
 
   return (
     <div className={`app ${navOpen ? 'navopen' : ''}`}>
@@ -98,7 +101,10 @@ export function Shell({ children }: { children: ReactNode }) {
           <span className="kbd hide-phone">Ctrl K</span>
         </button>
         <div className="f1" />
-        <button className="ib" aria-label="Notifications" onClick={() => setOverlay(overlay === 'bell' ? null : 'bell')}><Icon name="bell" /></button>
+        <button className="ib" aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`} onClick={() => setOverlay(overlay === 'bell' ? null : 'bell')}>
+          <Icon name="bell" />
+          {unread > 0 && <span className="bellc">{unread > 99 ? '99+' : unread}</span>}
+        </button>
         <button className="ib" aria-label={`Switch to ${prefs.theme === 'dark' ? 'light' : 'dark'} theme`} onClick={prefs.toggleTheme}><Icon name={prefs.theme === 'dark' ? 'sun' : 'moon'} /></button>
         <button className="ib hide-phone" aria-label={`Switch to ${prefs.density === 'compact' ? 'comfortable' : 'compact'} rows`} title="Row density" onClick={prefs.toggleDensity}><Icon name="rows" /></button>
         <button className="ib hide-phone" aria-label="Keyboard shortcuts" onClick={() => setOverlay('keys')}><Icon name="keyboard" /></button>
@@ -144,19 +150,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
       {overlay === 'palette' && <CommandPalette onClose={() => setOverlay(null)} />}
       {overlay === 'keys' && <ShortcutSheet onClose={() => setOverlay(null)} />}
-      {overlay === 'bell' && (
-        <>
-          <div className="scrim" style={{ background: 'transparent' }} onClick={() => setOverlay(null)} />
-          <div className="modal bell" role="dialog" aria-label="Notifications">
-            <div className="hdr"><h3>Notifications</h3></div>
-            <div className="empty" style={{ padding: '32px 20px' }}>
-              <Icon name="bell" size={20} />
-              <div>Nothing here yet</div>
-              <div className="t3" style={{ fontSize: 12 }}>Mentions, review requests and run alerts arrive with the notification service (M3).</div>
-            </div>
-          </div>
-        </>
-      )}
+      {overlay === 'bell' && <BellMenu onClose={() => setOverlay(null)} />}
       {overlay === 'user' && (
         <>
           <div className="scrim" style={{ background: 'transparent' }} onClick={() => setOverlay(null)} />

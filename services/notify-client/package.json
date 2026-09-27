@@ -1,0 +1,20 @@
+{
+  "name": "@tb/notify-client",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@tb/contracts": "workspace:*",
+    "@tb/iam": "workspace:*",
+    "@tb/platform": "workspace:*",
+    "@tb/search": "workspace:*",
+    "fastify": "^5.12.5",
+    "fastify-type-provider-zod": "^7.0.0",
+    "kysely": "^0.29.6",
+    "zod": "^4.6.5"
+  }
+}

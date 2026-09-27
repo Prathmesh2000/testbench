@@ -167,6 +167,7 @@ export async function startHarness(): Promise<Harness> {
     verify,
     index,
     jira,
+    notify: null,
     webUrl: cfg.WEB_URL,
     logLevel: 'silent',
   });

@@ -15,6 +15,7 @@
     "@tb/defect": "workspace:*",
     "@tb/execution": "workspace:*",
     "@tb/iam": "workspace:*",
+    "@tb/notify-client": "workspace:*",
     "@tb/platform": "workspace:*",
     "@tb/repository": "workspace:*",
     "@tb/search": "workspace:*",

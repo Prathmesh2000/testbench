@@ -6,6 +6,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { CaseIndex } from './case-index';
 import { deleteFilter, listFilters, saveFilter, setSubscription, updateFilter } from './filters';
+import { syncFilterQuery } from './percolator';
 import { fieldValues, search, searchKeys } from './search';
 
 const Project = z.object({ projectId: z.uuid() });
@@ -77,9 +78,10 @@ export const searchRoutes: FastifyPluginAsync<ServiceDeps & { index: CaseIndex }
     '/projects/:projectId/filters/:filterId',
     { schema: { params: FilterParams, body: SavedFilterBody } },
     async (req, reply) => {
-      await projectTx(db, req, req.params.projectId, 'case.read', (trx) =>
-        updateFilter(trx, callerOf(req), req.params.projectId, req.params.filterId, req.body),
-      );
+      await projectTx(db, req, req.params.projectId, 'case.read', async (trx) => {
+        await updateFilter(trx, callerOf(req), req.params.projectId, req.params.filterId, req.body);
+        await syncFilterQuery(trx, index, req.params.filterId);
+      });
       return reply.status(204).send();
     },
   );
@@ -88,9 +90,10 @@ export const searchRoutes: FastifyPluginAsync<ServiceDeps & { index: CaseIndex }
     '/projects/:projectId/filters/:filterId',
     { schema: { params: FilterParams } },
     async (req, reply) => {
-      await projectTx(db, req, req.params.projectId, 'case.read', (trx) =>
-        deleteFilter(trx, callerOf(req), req.params.projectId, req.params.filterId),
-      );
+      await projectTx(db, req, req.params.projectId, 'case.read', async (trx) => {
+        await deleteFilter(trx, callerOf(req), req.params.projectId, req.params.filterId);
+        await syncFilterQuery(trx, index, req.params.filterId);
+      });
       return reply.status(204).send();
     },
   );
@@ -101,9 +104,16 @@ export const searchRoutes: FastifyPluginAsync<ServiceDeps & { index: CaseIndex }
       schema: { params: FilterParams, body: z.object({ subscribed: z.boolean() }) },
     },
     async (req, reply) => {
-      await projectTx(db, req, req.params.projectId, 'case.read', (trx) =>
-        setSubscription(trx, callerOf(req), req.params.projectId, req.params.filterId, req.body.subscribed),
-      );
+      await projectTx(db, req, req.params.projectId, 'case.read', async (trx) => {
+        await setSubscription(
+          trx,
+          callerOf(req),
+          req.params.projectId,
+          req.params.filterId,
+          req.body.subscribed,
+        );
+        await syncFilterQuery(trx, index, req.params.filterId);
+      });
       return reply.status(204).send();
     },
   );

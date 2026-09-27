@@ -1,5 +1,6 @@
 import { defectRoutes, jiraWebhook, type JiraClient } from '@tb/defect';
 import { executionRoutes } from '@tb/execution';
+import { notifyRoutes, type NotifyClient } from '@tb/notify-client';
 import { authPlugin, iamRoutes } from '@tb/iam';
 import { installErrorHandler, type ServiceDeps, type TokenVerifier } from '@tb/platform';
 import { repositoryRoutes } from '@tb/repository';
@@ -12,6 +13,7 @@ export interface AppOptions extends ServiceDeps {
   verify: TokenVerifier;
   index: CaseIndex;
   jira: JiraClient | null;
+  notify: NotifyClient | null;
   webUrl: string;
   logLevel?: string;
 }
@@ -62,6 +64,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
       await api.register(executionRoutes, deps);
       await api.register(searchRoutes, { ...deps, index: opts.index });
       await api.register(defectRoutes, { ...deps, jira: opts.jira, webUrl: opts.webUrl });
+      if (opts.notify) await api.register(notifyRoutes, { ...deps, client: opts.notify });
     },
     { prefix: '/api/v1' },
   );
