@@ -41,6 +41,9 @@ importers:
       '@tb/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@tb/tql':
+        specifier: workspace:*
+        version: link:../../packages/tql
       jose:
         specifier: ^6.2.12
         version: 6.2.12
