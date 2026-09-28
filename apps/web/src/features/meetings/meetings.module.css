@@ -1,0 +1,29 @@
+/* Meetings, from the canvas artboard Meetings.dc.html. */
+.layout { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
+.head { height: 46px; padding: 0 14px; gap: 10px; display: flex; align-items: center; border-bottom: 1px solid var(--border); background: var(--panel); flex: none; }
+.body { flex: 1; display: flex; min-height: 0; }
+.list { flex: 1; min-width: 0; overflow: auto; background: var(--panel); }
+
+.mrow { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 18px; border: 0; border-bottom: 1px solid var(--soft); background: transparent; color: var(--text); text-align: left; cursor: pointer; font-size: 12.5px; }
+.mrow:hover { background: var(--hover); }
+.mrow.on { background: var(--sel); box-shadow: inset 2px 0 0 var(--accent); }
+.when { width: 150px; flex: none; font-family: var(--font-mono), monospace; font-size: 11.5px; color: var(--text2); }
+
+.live { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--failed); font-weight: 600; }
+.live i { width: 7px; height: 7px; border-radius: 50%; background: var(--failed); animation: pl 1.4s infinite; }
+@keyframes pl { 50% { opacity: .3; } }
+
+.mpane { width: 440px; flex: none; border-left: 1px solid var(--border); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+.phead { padding: 14px 16px 12px; border-bottom: 1px solid var(--soft); flex: none; }
+.cs { border-bottom: 1px solid var(--soft); }
+.cs > summary { display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 16px; cursor: pointer; list-style: none; font-size: 11px; }
+.cs > summary::-webkit-details-marker { display: none; }
+.cs > summary::before { content: ''; width: 5px; height: 5px; border-right: 1.5px solid var(--text3); border-bottom: 1.5px solid var(--text3); transform: rotate(-45deg); transition: transform .12s; margin-right: 2px; }
+.cs[open] > summary::before { transform: rotate(45deg); }
+.ai { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--soft); font-size: 12.5px; }
+
+.people { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 32px; padding: 4px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); }
+.people:focus-within { border-color: var(--accent); }
+.unpick { display: inline-flex; border: 0; background: transparent; color: var(--text3); padding: 0; cursor: pointer; }
+.unpick:hover { color: var(--text); }
+.addPerson { border: 0; background: transparent; color: var(--text3); font-size: 12px; height: 22px; outline: none; }

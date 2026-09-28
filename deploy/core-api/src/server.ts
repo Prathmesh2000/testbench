@@ -83,6 +83,8 @@ const app = await buildApp({
   keycloak,
   issuer: cfg.OIDC_ISSUER,
   gatewayUrl: cfg.AGENT_GATEWAY_URL ?? null,
+  collab: { url: cfg.COLLAB_URL, secret: cfg.COLLAB_SECRET ?? null },
+  calendarUrl: cfg.CALENDAR_URL ?? null,
   webUrl: cfg.WEB_URL,
   logLevel: cfg.LOG_LEVEL,
 });

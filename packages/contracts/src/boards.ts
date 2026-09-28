@@ -69,6 +69,10 @@ export const ActionItemBody = z.object({
 export const ActionItemPatch = z.object({ status: z.enum(['open', 'done']) });
 
 export const ConvertBody = z.discriminatedUnion('to', [
-  z.object({ to: z.literal('case'), moduleId: z.uuid(), priority: z.enum(['P0', 'P1', 'P2', 'P3']).default('P2') }),
+  z.object({
+    to: z.literal('case'),
+    moduleId: z.uuid(),
+    priority: z.enum(['P0', 'P1', 'P2', 'P3']).default('P2'),
+  }),
   z.object({ to: z.literal('task') }),
 ]);

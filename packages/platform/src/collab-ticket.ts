@@ -14,7 +14,8 @@ export interface CollabClaims {
   exp: number;
 }
 
-const sign = (secret: string, payload: string) => createHmac('sha256', secret).update(payload).digest('base64url');
+const sign = (secret: string, payload: string) =>
+  createHmac('sha256', secret).update(payload).digest('base64url');
 
 export function signCollabTicket(secret: string, claims: CollabClaims): string {
   const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');

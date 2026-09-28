@@ -1,0 +1,53 @@
+/* Boards, from the canvas artboard Boards.dc.html. */
+.board { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); }
+.bhead { height: 46px; padding: 0 14px; gap: 10px; display: flex; align-items: center; border-bottom: 1px solid var(--border); background: var(--panel); flex: none; }
+.title { font-size: 13px; color: var(--text2); }
+.titleInput { height: 28px; min-width: 120px; width: 320px; max-width: 40vw; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text); padding: 0 6px; font-size: 13px; }
+.titleInput:hover { border-color: var(--border); }
+.titleInput:focus { outline: none; border-color: var(--accent); background: var(--bg); }
+
+.status { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; }
+.status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ok { color: var(--passed); }
+.ro { color: var(--text2); }
+.wait { color: var(--blocked); }
+.bad { color: var(--failed); }
+
+/* Doc */
+.docScroll { flex: 1; overflow: auto; background: var(--panel); padding: 20px 32px; }
+.docPane { max-width: 760px; display: flex; flex-direction: column; gap: 12px; }
+.docPaneCompact { display: flex; flex-direction: column; gap: 6px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 4px; position: sticky; top: -20px; padding: 6px 0; background: var(--panel); z-index: 2; }
+.docBody { min-height: 60vh; }
+.prose { outline: none; font-size: 14px; line-height: 1.7; color: var(--text); min-height: 100%; }
+.proseCompact { font-size: 12.5px; line-height: 1.55; min-height: 120px; border: 1px solid var(--border); border-radius: 5px; padding: 6px 8px; background: var(--bg); }
+.prose h1 { font-family: var(--font-cond), var(--font-sans), sans-serif; font-size: 24px; margin: 0 0 6px; }
+.prose h2 { font-size: 16px; margin: 20px 0 6px; }
+.proseCompact h1 { font-size: 16px; }
+.proseCompact h2 { font-size: 14px; margin-top: 10px; }
+.prose p { margin: 0 0 10px; }
+.proseCompact p { margin: 0 0 4px; }
+.prose ul, .prose ol { padding-left: 22px; margin: 0 0 10px; }
+.prose code { font-family: var(--font-mono), monospace; font-size: .9em; background: var(--raised2); border-radius: 3px; padding: 1px 4px; }
+.prose pre { background: var(--raised); border: 1px solid var(--soft); border-radius: 6px; padding: 10px 12px; overflow: auto; }
+.prose pre code { background: none; padding: 0; }
+.prose :global(.collaboration-carets__caret) { position: relative; margin: 0 -1px; border-left: 1px solid; border-right: 1px solid; word-break: normal; pointer-events: none; }
+.prose :global(.collaboration-carets__label) { position: absolute; top: -1.4em; left: -1px; font-size: 10px; font-weight: 500; line-height: normal; color: #fff; padding: 0 4px; border-radius: 3px 3px 3px 0; white-space: nowrap; user-select: none; }
+
+/* Sheet */
+.fbar { height: 36px; padding: 0 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); background: var(--panel); flex: none; }
+.sheetScroll { flex: 1; overflow: auto; background: var(--bg); min-height: 0; }
+.sg { display: flex; flex-direction: column; font-size: 12.5px; outline: none; }
+.sr { display: flex; height: 30px; }
+.rn { width: 40px; flex: none; background: var(--raised); color: var(--text3); font-family: var(--font-mono), monospace; font-size: 11px; display: flex; align-items: center; justify-content: center; border-right: 1px solid var(--soft); border-bottom: 1px solid var(--soft); position: sticky; left: 0; z-index: 1; }
+.sc { width: 168px; flex: none; height: 30px; border-right: 1px solid var(--soft); border-bottom: 1px solid var(--soft); background: var(--panel); display: flex; align-items: center; padding: 0 8px; cursor: cell; }
+.sh { position: sticky; top: 0; z-index: 2; height: 28px; }
+.sh .sc { background: var(--raised); color: var(--text3); font-size: 11.5px; font-weight: 500; height: 28px; border-bottom-color: var(--border); cursor: default; }
+.sh .rn { z-index: 3; height: 28px; border-bottom-color: var(--border); }
+.sc.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+.sg:not(:focus-within) .sc.sel { box-shadow: inset 0 0 0 2px var(--border); }
+.hdrOn { color: var(--accent) !important; }
+.cellInput { width: calc(100% + 16px); height: 100%; margin: 0 -8px; border: 0; background: var(--panel); padding: 0 8px; font-size: 12.5px; outline: none; color: var(--text); }
+
+/* Whiteboard */
+.wb { position: relative; flex: 1; min-height: 0; }

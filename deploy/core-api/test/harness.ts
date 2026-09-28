@@ -184,6 +184,8 @@ export async function startHarness(): Promise<Harness> {
     keycloak: null,
     issuer: ISSUER,
     gatewayUrl: null,
+    collab: { url: 'ws://localhost:4300', secret: 'test-collab-secret-at-least-32-characters' },
+    calendarUrl: null,
     webUrl: cfg.WEB_URL,
     logLevel: 'silent',
   });
@@ -206,6 +208,10 @@ export async function startHarness(): Promise<Harness> {
       await owner.transaction().execute(async (trx) => {
         await sql`SET LOCAL session_replication_role = replica`.execute(trx);
         for (const table of [
+          'meet.action_item',
+          'meet.meeting',
+          'collab.board_state',
+          'collab.board',
           'audit.entry',
           'iam.token',
           'ai.usage',

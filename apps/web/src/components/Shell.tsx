@@ -32,8 +32,8 @@ const NAV: { group: string; items: NavItem[] }[] = [
   ] },
   { group: 'Knowledge', items: [
     { href: '/docs', label: 'Docs & PRDs', icon: 'doc' },
-    { href: '/soon/boards', label: 'Boards', icon: 'board', soon: 'M5' },
-    { href: '/soon/meetings', label: 'Meetings', icon: 'calendar', soon: 'M5' },
+    { href: '/boards', label: 'Boards', icon: 'board' },
+    { href: '/meetings', label: 'Meetings', icon: 'calendar' },
   ] },
   { group: 'System', items: [
     { href: '/notifications', label: 'Notifications', icon: 'bell' },

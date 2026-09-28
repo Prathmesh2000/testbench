@@ -1,8 +1,10 @@
 import { aiRoutes, type AiService } from '@tb/ai';
 import { analyticsRoutes } from '@tb/analytics';
+import { collabRoutes, type CollabOptions } from '@tb/collab';
 import { defectRoutes, jiraWebhook, type JiraClient } from '@tb/defect';
 import { docsRoutes } from '@tb/docs';
 import { executionRoutes } from '@tb/execution';
+import { meetingRoutes } from '@tb/meetings';
 import { notifyRoutes, type NotifyClient } from '@tb/notify-client';
 import { adminRoutes, authPlugin, iamRoutes, type KeycloakAdmin } from '@tb/iam';
 import { auditRoutes } from '@tb/audit';
@@ -24,6 +26,8 @@ export interface AppOptions extends ServiceDeps {
   /** For the Integrations tab. */
   issuer: string;
   gatewayUrl: string | null;
+  collab: CollabOptions;
+  calendarUrl: string | null;
   webUrl: string;
   logLevel?: string;
 }
@@ -80,6 +84,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
       await api.register(analyticsRoutes, deps);
       await api.register(docsRoutes, { ...deps, ai: opts.ai });
       await api.register(aiRoutes, { ...deps, ai: opts.ai });
+      await api.register(collabRoutes, { ...deps, collab: opts.collab });
+      await api.register(meetingRoutes, { ...deps, calendarUrl: opts.calendarUrl });
       if (opts.notify) await api.register(notifyRoutes, { ...deps, client: opts.notify });
     },
     { prefix: '/api/v1' },

@@ -45,7 +45,10 @@ const Config = z.object({
   KEYCLOAK_ADMIN_USER: z.string().min(1).optional(),
   KEYCLOAK_ADMIN_PASSWORD: z.string().min(1).optional(),
   // Live boards: core-api signs tickets for the collaboration server with this shared secret.
-  COLLAB_URL: z.string().regex(/^wss?:\/\//).default('ws://localhost:4300'),
+  COLLAB_URL: z
+    .string()
+    .regex(/^wss?:\/\//)
+    .default('ws://localhost:4300'),
   COLLAB_SECRET: z.string().min(32).optional(),
   /** Calendar invites for meetings; locally the provider sandbox records them. */
   CALENDAR_URL: z.url().optional(),

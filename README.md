@@ -18,6 +18,9 @@ Built so far:
   Anthropic, xAI and offline Ollama, with per-task models, tenant policy, bring-your-own keys and token budgets.
 - **M5 (part 1)**: the admin console (members and invitations, custom roles with guardrails, integrations, AI
   providers, the audit log), personal access tokens, the MCP server for Claude and other agents, and the Slack bot.
+- **M5 (part 2)**: live boards (documents on TipTap, sheets, Excalidraw whiteboards) synced with Yjs through a
+  Hocuspocus collaboration server, and meetings with calendar invites, live notes and action items that become
+  test cases.
 
 ## Run it locally
 
@@ -30,7 +33,7 @@ pnpm infra:up             # Postgres, Valkey, Keycloak, S3, OpenSearch, Jira san
 pnpm db:migrate
 pnpm seed --size dev      # 1,00,000 cases; use --size demo for 1,000
 pnpm search:reindex       # builds the search index from Postgres (after every seed)
-pnpm dev                  # web :3000, core-api :4000, notification service :4100, agent gateway :4200
+pnpm dev                  # web :3000, core-api :4000, notification service :4100, agent gateway :4200, collaboration :4300
 ```
 
 ```mermaid
@@ -122,8 +125,9 @@ The integration tests create their own organisations and users and delete them a
 |---|---|
 | `apps/web` | Next.js app. Screens live in `src/features/*`; design tokens in `src/app/globals.css` come from the Claude Design canvas |
 | `deploy/core-api` | The API process: mounts the service modules below (HLD §1.1) |
-| `services/iam`, `repository`, `execution`, `search`, `defect`, `analytics`, `docs`, `ai`, `audit` | Service modules: routes, queries, and pure domain logic with unit tests |
+| `services/iam`, `repository`, `execution`, `search`, `defect`, `analytics`, `docs`, `ai`, `audit`, `collab`, `meetings` | Service modules: routes, queries, and pure domain logic with unit tests |
 | `services/notification`, `deploy/notification-local` | The standalone notification service (its own DynamoDB and SQS) and its local process |
+| `deploy/collab-server` | Hocuspocus server for live boards; opens a board only with a ticket core-api signed |
 | `deploy/agent-gateway` | MCP server and Slack bot; holds no data or permissions of its own |
 | `services/notify-client` | core-api's side: turns events into notifications, and the inbox, preferences and console routes |
 | `packages/tql` | The TQL query language: parser, autocomplete and highlighting, shared by API and web |
