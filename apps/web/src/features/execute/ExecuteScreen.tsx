@@ -242,6 +242,7 @@ export function ExecuteScreen({ runId }: { runId: string }) {
                 <ResultStatus result={i.status} label={false} size={14} />
                 <span className={s.k}>{i.caseKey}</span>
                 <span className="trunc f1">{i.title}</span>
+                {i.dataRow !== null && <span className={s.row} title={Object.entries(i.data ?? {}).map(([k, v]) => `${k}: ${v}`).join(' · ')}>row {i.dataRow + 1}</span>}
                 {run.data && run.data.configs.length > 1 && <span className="t3" style={{ fontSize: 11 }}>{i.config.split(' · ')[0]}</span>}
               </button>
             ))}
@@ -278,6 +279,15 @@ export function ExecuteScreen({ runId }: { runId: string }) {
                   </div>
                   <ResultStatus result={item.status} />
                 </div>
+
+                {item.data && (
+                  <div className={s.data} aria-label="Test data for this item">
+                    <span className="sec">Test data · row {(item.dataRow ?? 0) + 1}</span>
+                    {Object.entries(item.data).map(([k, v]) => (
+                      <span key={k} className={s.kv}><span className="t3">{k}</span><span className="mono">{v || '—'}</span></span>
+                    ))}
+                  </div>
+                )}
 
                 {item.preconditions && (
                   <details className={s.pre}>

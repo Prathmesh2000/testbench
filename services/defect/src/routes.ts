@@ -1,11 +1,22 @@
-import { DefectListQuery, LinkBugBody, LogBugBody, RetestBody } from '@tb/contracts';
+import {
+  DefectListQuery,
+  LinkBugBody,
+  LinkIssueBody,
+  LogBugBody,
+  parseCaseKey,
+  RetestBody,
+} from '@tb/contracts';
 import { projectTx } from '@tb/iam';
-import { AppError, type ServiceDeps } from '@tb/platform';
+import { AppError, notFound, type ServiceDeps, type Tx } from '@tb/platform';
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
+  caseIssues,
   getDefect,
+  jiraStatuses,
+  linkIssueToCase,
+  unlinkIssueFromCase,
   handleWebhookIssue,
   linkBug,
   listDefects,
@@ -19,6 +30,20 @@ import type { JiraClient, JiraIssue } from './jira';
 import { verifySignature } from './webhook';
 
 const Project = z.object({ projectId: z.uuid() });
+const CaseParams = Project.extend({ key: z.string().regex(/^TC-\d+$/i) });
+// Workflows change rarely; ten minutes keeps the status list fresh without a Jira call per page view.
+const STATUS_TTL_S = 600;
+
+async function caseIdOf(trx: Tx, projectId: string, key: string): Promise<string> {
+  const c = await trx
+    .selectFrom('repo.test_case')
+    .select('id')
+    .where('project_id', '=', projectId)
+    .where('key_no', '=', parseCaseKey(key)!)
+    .executeTakeFirst();
+  if (!c) throw notFound('Case');
+  return c.id;
+}
 const callerOf = (req: FastifyRequest) => ({
   orgId: req.auth.orgId,
   userId: req.auth.userId,
@@ -31,7 +56,7 @@ interface DefectDeps extends ServiceDeps {
   webUrl: string;
 }
 
-export const defectRoutes: FastifyPluginAsync<DefectDeps> = async (app, { db, jira, webUrl }) => {
+export const defectRoutes: FastifyPluginAsync<DefectDeps> = async (app, { db, cache, jira, webUrl }) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
   const connected = (): JiraClient => {
     if (!jira)
@@ -50,6 +75,60 @@ export const defectRoutes: FastifyPluginAsync<DefectDeps> = async (app, { db, ji
       projectTx(db, req, req.params.projectId, 'run.read', (trx) =>
         listDefects(trx, connected(), callerOf(req), req.params.projectId, req.query),
       ),
+  );
+
+  // ---------- Jira issues on a case ----------
+  r.get('/projects/:projectId/cases/:key/jira', { schema: { params: CaseParams } }, async (req) =>
+    projectTx(db, req, req.params.projectId, 'case.read', async (trx) =>
+      caseIssues(
+        trx,
+        connected(),
+        req.params.projectId,
+        await caseIdOf(trx, req.params.projectId, req.params.key),
+      ),
+    ),
+  );
+  r.post(
+    '/projects/:projectId/cases/:key/jira',
+    { schema: { params: CaseParams, body: LinkIssueBody } },
+    async (req, reply) => {
+      await projectTx(db, req, req.params.projectId, 'case.write', async (trx) =>
+        linkIssueToCase(
+          trx,
+          connected(),
+          callerOf(req),
+          req.params.projectId,
+          await caseIdOf(trx, req.params.projectId, req.params.key),
+          req.body.jiraKey,
+        ),
+      );
+      return reply.status(201).send();
+    },
+  );
+  r.delete(
+    '/projects/:projectId/cases/:key/jira/:defectId',
+    { schema: { params: CaseParams.extend({ defectId: z.uuid() }) } },
+    async (req, reply) => {
+      await projectTx(db, req, req.params.projectId, 'case.write', async (trx) =>
+        unlinkIssueFromCase(
+          trx,
+          req.params.projectId,
+          await caseIdOf(trx, req.params.projectId, req.params.key),
+          req.params.defectId,
+        ),
+      );
+      return reply.status(204).send();
+    },
+  );
+  r.get('/projects/:projectId/jira/statuses', { schema: { params: Project } }, async (req) =>
+    projectTx(db, req, req.params.projectId, 'run.read', async (trx) => {
+      const key = `jira-statuses:${req.params.projectId}`;
+      const hit = await cache.get<Awaited<ReturnType<typeof jiraStatuses>>>(key);
+      if (hit) return hit;
+      const statuses = await jiraStatuses(trx, connected(), req.params.projectId);
+      await cache.set(key, statuses, STATUS_TTL_S);
+      return statuses;
+    }),
   );
 
   r.get('/projects/:projectId/defects/sync', { schema: { params: Project } }, async (req) =>

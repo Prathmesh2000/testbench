@@ -19,6 +19,7 @@ import { badRequest, conflict, notFound, recordEvent, type ObjectStorage, type T
 import { caseFilter, loadModules, modulePaths } from '@tb/repository';
 import { sql } from 'kysely';
 import { autoBlockChanges, type BlockableItem } from './auto-block';
+import { expandItems, fillPlaceholders, loadRows } from './data-rows';
 import { counterDelta, deriveItemStatus, withStepStatus, type CounterField } from './item-status';
 import { createPreparedRun } from './run-prep';
 import { orderByPrerequisites } from './run-order';
@@ -30,6 +31,8 @@ interface Actor {
 
 /** Runs up to this many cases are written inside the request; larger ones are prepared in the background (run-prep.ts). */
 export const MAX_RUN_CASES = 5_000;
+/** Data rows multiply items; this bounds a synchronous run however the multiplication falls. */
+export const MAX_RUN_ITEMS = 50_000;
 
 const COUNTER_FIELDS: CounterField[] = ['passed', 'failed', 'blocked', 'skipped'];
 
@@ -134,7 +137,7 @@ export async function createRun(
   const cases = await trx
     .selectFrom('repo.test_case as c')
     .innerJoin('repo.module as m', 'm.id', 'c.module_id')
-    .select(['c.id', 'c.current_version'])
+    .select(['c.id', 'c.current_version', 'c.data_set_id'])
     .where(caseFilter(projectId, body.filter))
     .where('c.status', '!=', 'obsolete')
     .orderBy('m.path')
@@ -167,6 +170,7 @@ export async function createRun(
   const dependsOn = new Map<string, string[]>();
   for (const d of deps) dependsOn.set(d.case_id, [...(dependsOn.get(d.case_id) ?? []), d.depends_on_id]);
   const versionOf = new Map(cases.map((c) => [c.id, c.current_version]));
+  const dataSetOf = new Map(cases.map((c) => [c.id, c.data_set_id]));
   const ordered = orderByPrerequisites(
     cases.map((c) => c.id),
     dependsOn,
@@ -179,6 +183,16 @@ export async function createRun(
     .returning(sql<number>`next_run_no - 1`.as('key_no'))
     .executeTakeFirstOrThrow();
   const configs = [...new Set(body.configs)];
+  const toRun = ordered.map((id) => ({
+    id,
+    version: versionOf.get(id)!,
+    dataSetId: dataSetOf.get(id) ?? null,
+  }));
+  const expanded = expandItems(toRun, configs, await loadRows(trx, toRun));
+  if (expanded.length > MAX_RUN_ITEMS)
+    throw badRequest(
+      `This run would have ${expanded.length.toLocaleString('en-IN')} items (data rows × configurations). Keep it under ${MAX_RUN_ITEMS.toLocaleString('en-IN')}.`,
+    );
   const { id: runId } = await trx
     .insertInto('exec.run')
     .values({
@@ -191,24 +205,25 @@ export async function createRun(
       build: body.build,
       configs,
       due_at: body.dueAt,
-      total: ordered.length * configs.length,
+      total: expanded.length,
       created_by: actor.userId,
     })
     .returning('id')
     .executeTakeFirstOrThrow();
 
-  const items = ordered.flatMap((caseId, i) =>
-    configs.map((config, c) => ({
-      org_id: actor.orgId,
-      project_id: projectId,
-      run_id: runId,
-      case_id: caseId,
-      case_version: versionOf.get(caseId)!,
-      config,
-      position: i * configs.length + c,
-      assignee_id: body.assigneeIds.length ? body.assigneeIds[i % body.assigneeIds.length]! : null,
-    })),
-  );
+  const items = expanded.map((e, position) => ({
+    org_id: actor.orgId,
+    project_id: projectId,
+    run_id: runId,
+    case_id: e.caseId,
+    case_version: e.version,
+    config: e.config,
+    position,
+    // Assign by case, so all data rows of one case go to the same tester.
+    assignee_id: body.assigneeIds.length ? body.assigneeIds[e.caseIndex % body.assigneeIds.length]! : null,
+    data_row: e.dataRow,
+    data: e.data ? JSON.stringify(e.data) : null,
+  }));
   for (let i = 0; i < items.length; i += 1_000)
     await trx
       .insertInto('exec.run_item')
@@ -250,6 +265,8 @@ function itemRows(trx: Tx) {
       'i.blocked_reason',
       'i.step_status',
       'i.duration_s',
+      'i.data_row',
+      'i.data',
       'c.key_no',
       'c.module_id',
       'c.priority',
@@ -280,13 +297,15 @@ function toItemRow(r: ItemRecord, paths: Map<string, string>): RunItemRow {
     assignee: userRef(r.assignee_id, r.assignee_name, r.assignee_email),
     blockedReason: r.blocked_reason,
     position: r.position,
+    dataRow: r.data_row,
+    data: r.data,
   };
 }
 
 export async function listItems(trx: Tx, projectId: string, runId: string): Promise<RunItemRow[]> {
   await findRun(trx, projectId, runId);
   const [rows, modules] = await Promise.all([
-    itemRows(trx).where('i.run_id', '=', runId).orderBy('i.position').execute(),
+    itemRows(trx).where('i.run_id', '=', runId).orderBy('i.position').orderBy('i.data_row').execute(),
     loadModules(trx, projectId),
   ]);
   const paths = modulePaths(modules);
@@ -344,8 +363,13 @@ export async function getItem(
     runId,
     caseId: item.case_id,
     caseVersion: item.case_version,
-    preconditions: item.preconditions,
-    steps: item.steps,
+    // Steps and preconditions as the tester reads them for this data row: {{column}} filled in.
+    preconditions: fillPlaceholders(item.preconditions, item.data),
+    steps: item.steps.map((st) => ({
+      action: fillPlaceholders(st.action, item.data),
+      expected: fillPlaceholders(st.expected, item.data),
+      data: fillPlaceholders(st.data, item.data),
+    })),
     stepStatus: item.steps.map((_, i) => (item.step_status[i] as Result | undefined) ?? 'untested'),
     actuals: item.steps.map((_, i) => actualByStep.get(i) ?? null),
     evidence: await Promise.all(

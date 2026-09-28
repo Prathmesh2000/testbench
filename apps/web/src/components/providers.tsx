@@ -28,8 +28,11 @@ const writePref = (key: string, value: string) => {
 interface Prefs {
   theme: 'dark' | 'light';
   density: 'compact' | 'comfy';
+  /** Left navigation: full labels, or icons only to give the grid more width. */
+  nav: 'full' | 'mini';
   toggleTheme(): void;
   toggleDensity(): void;
+  toggleNav(): void;
 }
 const PrefsContext = createContext<Prefs | null>(null);
 export const usePrefs = () => useContext(PrefsContext)!;
@@ -37,20 +40,24 @@ export const usePrefs = () => useContext(PrefsContext)!;
 function PrefsProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Prefs['theme']>('dark');
   const [density, setDensity] = useState<Prefs['density']>('compact');
+  const [nav, setNav] = useState<Prefs['nav']>('full');
   useEffect(() => {
     // Applied after hydration; the inline script in the root layout already set the classes to avoid a flash.
     if (readPref('tb.theme') === 'light') setTheme('light');
     if (readPref('tb.density') === 'comfy') setDensity('comfy');
+    if (readPref('tb.nav') === 'mini') setNav('mini');
   }, []);
   useEffect(() => {
     document.body.classList.toggle('light', theme === 'light');
     document.body.classList.toggle('comfy', density === 'comfy');
-  }, [theme, density]);
+    document.body.classList.toggle('navmini', nav === 'mini');
+  }, [theme, density, nav]);
   const value = useMemo<Prefs>(() => ({
-    theme, density,
+    theme, density, nav,
     toggleTheme: () => setTheme((t) => { const next = t === 'dark' ? 'light' : 'dark'; writePref('tb.theme', next); return next; }),
     toggleDensity: () => setDensity((d) => { const next = d === 'compact' ? 'comfy' : 'compact'; writePref('tb.density', next); return next; }),
-  }), [theme, density]);
+    toggleNav: () => setNav((n) => { const next = n === 'full' ? 'mini' : 'full'; writePref('tb.nav', next); return next; }),
+  }), [theme, density, nav]);
   return <PrefsContext.Provider value={value}>{children}</PrefsContext.Provider>;
 }
 
@@ -75,12 +82,12 @@ function SessionProvider({ children }: { children: ReactNode }) {
     const message = me.error instanceof ApiError ? me.error.message : 'Could not reach the Testbench API.';
     return <div className="empty" style={{ height: '100%' }}><Icon name="alert" size={22} /><div>{message}</div><button className="btn" onClick={() => me.refetch()}>Try again</button></div>;
   }
-  if (!me.data) return <div className="empty t3" style={{ height: '100%' }}>Loading your workspace…</div>;
+  if (!me.data) return <div className="empty t3" style={{ height: '100%' }}><Icon name="refresh" size={18} className="spin" /><div>Loading your workspace…</div></div>;
   // An archived project stays selectable (to read its history) but is never the default.
   const project =
     me.data.projects.find((p) => p.id === projectId) ?? me.data.projects.find((p) => !p.archived) ?? me.data.projects[0];
   if (!project) {
-    return <div className="empty" style={{ height: '100%' }}><div>You are not on any project yet.</div><div className="t3">Ask a project admin to add you.</div></div>;
+    return <div className="empty" style={{ height: '100%' }}><Icon name="group" size={20} /><div>You are not on any project yet.</div><div className="t3">Ask a project admin to add you.</div></div>;
   }
   const value: Session = {
     me: me.data,

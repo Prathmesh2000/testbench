@@ -47,6 +47,7 @@ function caseRows(trx: Tx) {
       'c.created_at',
       'c.current_version',
       'c.custom',
+      'c.data_set_id',
       'm.path as module_path',
       'o.id as owner_id',
       'o.name as owner_name',
@@ -205,7 +206,7 @@ async function readVersion(
 
 export async function getCase(trx: Tx, projectId: string, keyNo: number): Promise<CaseDetail> {
   const row = await findCase(trx, projectId, keyNo);
-  const [modules, version, dependsOn, usedBy, recent] = await Promise.all([
+  const [modules, version, dependsOn, usedBy, recent, dataSet] = await Promise.all([
     loadModules(trx, projectId),
     readVersion(trx, projectId, row.id, row.current_version),
     trx
@@ -240,6 +241,13 @@ export async function getCase(trx: Tx, projectId: string, keyNo: number): Promis
       .orderBy('i.updated_at', 'desc')
       .limit(10)
       .execute(),
+    row.data_set_id
+      ? trx
+          .selectFrom('repo.data_set')
+          .select(['id', 'name', sql<number>`jsonb_array_length(rows)`.as('row_count')])
+          .where('id', '=', row.data_set_id)
+          .executeTakeFirst()
+      : Promise.resolve(undefined),
   ]);
   return {
     ...toCaseRow(row, modulePaths(modules)),
@@ -253,6 +261,7 @@ export async function getCase(trx: Tx, projectId: string, keyNo: number): Promis
       lastResult: d.last_result as Result,
     })),
     usedBy: usedBy.map((u) => ({ key: caseKey(u.key_no), title: u.title })),
+    dataSet: dataSet ? { id: dataSet.id, name: dataSet.name, rowCount: dataSet.row_count } : null,
     recentResults: recent.map((r) => ({
       runKey: runKey(r.key_no),
       runName: r.name,

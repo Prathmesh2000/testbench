@@ -73,6 +73,7 @@ export interface TestCaseTable {
   last_result: Generated<string>;
   last_run_at: NullableTimestamp;
   current_version: Generated<number>;
+  data_set_id: string | null;
   created_by: string | null;
   created_at: Timestamp;
   updated_at: Timestamp;
@@ -168,6 +169,8 @@ export interface RunItemTable {
   blocked_reason: string | null;
   duration_s: Generated<number>;
   updated_at: Timestamp;
+  data_row: number | null;
+  data: ColumnType<Record<string, string> | null, string | null | undefined, string | null>;
 }
 
 export interface StepResultTable {
@@ -250,6 +253,7 @@ export interface DefectTable {
   assignee_name: string | null;
   fix_version: string | null;
   jira_updated_at: NullableTimestamp;
+  issue_type: Generated<string>;
   synced_at: Timestamp;
   created_by: string;
   created_at: Timestamp;
@@ -492,6 +496,41 @@ export interface ActionItemTable {
   created_at: Timestamp;
 }
 
+export interface DataSetTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  name: string;
+  description: Generated<string>;
+  columns: string[];
+  rows: ColumnType<Record<string, string>[], string | undefined, string>;
+  version: Generated<number>;
+  updated_by: string;
+  updated_at: Timestamp;
+  created_at: Timestamp;
+}
+
+export interface DataFileTable {
+  id: Generated<string>;
+  org_id: string;
+  data_set_id: string;
+  object_key: string;
+  file_name: string;
+  content_type: string;
+  size_bytes: number;
+  uploaded_by: string;
+  created_at: Timestamp;
+}
+
+export interface CaseLinkTable {
+  defect_id: string;
+  case_id: string;
+  org_id: string;
+  project_id: string;
+  linked_by: string;
+  linked_at: Timestamp;
+}
+
 export interface Database {
   'iam.org': OrgTable;
   'iam.app_user': AppUserTable;
@@ -532,4 +571,7 @@ export interface Database {
   'collab.board_state': BoardStateTable;
   'meet.meeting': MeetingTable;
   'meet.action_item': ActionItemTable;
+  'repo.data_set': DataSetTable;
+  'repo.data_file': DataFileTable;
+  'defect.case_link': CaseLinkTable;
 }

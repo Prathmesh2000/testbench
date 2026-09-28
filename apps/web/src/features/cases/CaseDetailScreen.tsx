@@ -11,12 +11,14 @@ import { api, ApiError, get } from '@/lib/api';
 import { ago, dateTimeIST } from '@/lib/format';
 import { stepsToGherkin, tokenizeGherkinLine } from '@/lib/gherkin';
 import { EdgeCases } from '@/features/ai/EdgeCases';
+import { CaseDataTab } from './CaseDataTab';
+import { CaseJiraTab } from './CaseJiraTab';
 import { ReviewBanner } from './ReviewBanner';
 import { StepsEditor } from './StepsEditor';
 import s from './detail.module.css';
 
 type Change = { kind: 'same' | 'changed' | 'added' | 'removed'; before?: Step; after?: Step };
-type Tab = 'steps' | 'versions' | 'links' | 'history';
+type Tab = 'steps' | 'data' | 'jira' | 'versions' | 'links' | 'history';
 
 /** Full page for one case: content, version history with diffs, links and past results. */
 export function CaseDetailScreen({ caseKey }: { caseKey: string }) {
@@ -29,6 +31,14 @@ export function CaseDetailScreen({ caseKey }: { caseKey: string }) {
     return <div className="page"><div className="empty" style={{ flex: 1 }}><Icon name="alert" size={20} /><div>{detail.error instanceof ApiError ? detail.error.message : 'Could not load this case.'}</div><Link className="btn" href="/cases">Back to test cases</Link></div></div>;
   }
   if (!c) return <div className="page"><div className="empty t3" style={{ flex: 1 }}>Loading {caseKey}…</div></div>;
+  const counts: Record<Tab, number | undefined> = {
+    steps: c.version.steps.length,
+    data: c.dataSet?.rowCount,
+    jira: undefined,
+    versions: c.currentVersion,
+    links: c.dependsOn.length + c.usedBy.length,
+    history: c.recentResults.length,
+  };
 
   return (
     <div className={s.wrap}>
@@ -42,10 +52,10 @@ export function CaseDetailScreen({ caseKey }: { caseKey: string }) {
             <h1 className="h1 f1" style={{ fontSize: 20, lineHeight: 1.25 }}>{c.title}</h1>
           </div>
           <div className="tabs" role="tablist" style={{ marginTop: 8 }}>
-            {(['steps', 'versions', 'links', 'history'] as Tab[]).map((t) => (
+            {(['steps', 'data', 'jira', 'versions', 'links', 'history'] as Tab[]).map((t) => (
               <button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>
-                {{ steps: 'Steps', versions: 'Versions', links: 'Links', history: 'History' }[t]}
-                <span className="n">{{ steps: c.version.steps.length, versions: c.currentVersion, links: c.dependsOn.length + c.usedBy.length, history: c.recentResults.length }[t]}</span>
+                {{ steps: 'Steps', data: 'Test data', jira: 'Jira', versions: 'Versions', links: 'Links', history: 'History' }[t]}
+                {counts[t] !== undefined && <span className="n">{counts[t]}</span>}
               </button>
             ))}
           </div>
@@ -53,6 +63,8 @@ export function CaseDetailScreen({ caseKey }: { caseKey: string }) {
         <div className={s.body}>
           <ReviewBanner c={c} />
           {tab === 'steps' && <StepsTab c={c} canEdit={can('case.write')} />}
+          {tab === 'data' && <CaseDataTab c={c} canEdit={can('case.write')} />}
+          {tab === 'jira' && <CaseJiraTab c={c} canEdit={can('case.write')} />}
           {tab === 'versions' && <VersionsTab c={c} />}
           {tab === 'links' && <LinksTab c={c} canEdit={can('case.write')} />}
           {tab === 'history' && <HistoryTab c={c} />}

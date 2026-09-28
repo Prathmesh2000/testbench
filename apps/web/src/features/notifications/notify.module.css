@@ -5,7 +5,7 @@
 .item.on { background: var(--sel); box-shadow: inset 2px 0 0 var(--accent); }
 .form { padding: 14px; display: flex; flex-direction: column; gap: 14px; max-width: 640px; }
 .editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
-.preview { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; background: var(--bg); font-size: 13px; line-height: 1.45; }
+.preview { border: 1px solid var(--border); border-radius: var(--r); padding: 12px 14px; background: var(--bg); font-size: 13px; line-height: 1.45; }
 .channels { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
 .matrix td { text-align: center; }
 .matrix td:first-child, .matrix th:first-child { text-align: left; }

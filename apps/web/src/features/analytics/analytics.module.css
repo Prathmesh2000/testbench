@@ -8,12 +8,12 @@
 .scroll { overflow-x: auto; }
 
 /* KPI strip */
-.kp { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; flex: none; }
+.kp { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow-sm); flex: none; }
 .kp4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .kp > div { padding: 12px 16px; border-right: 1px solid var(--soft); }
 .kp > div:last-child { border-right: 0; }
 .kpL { font-size: 11.5px; color: var(--text3); }
-.kpV { font-family: var(--font-cond), sans-serif; font-size: 26px; font-weight: 600; line-height: 1.15; }
+.kpV { font-family: var(--font-cond), sans-serif; font-size: 26px; font-weight: 600; line-height: 1.15; letter-spacing: -.025em; }
 .kpS { font-size: 11.5px; color: var(--text2); }
 
 /* Collapsible panels: a <details> whose <summary> is the panel header. */
@@ -41,30 +41,31 @@
 .mrow { display: grid; grid-template-columns: 150px minmax(0, 1fr) 54px; align-items: center; gap: 12px; height: 28px; font-size: 12.5px; }
 
 /* Release readiness */
-.verdict { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-radius: 8px; background: var(--failed-soft); border: 1px solid transparent; flex-wrap: wrap; }
+.verdict { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-radius: var(--r); background: var(--failed-soft); border: 1px solid transparent; flex-wrap: wrap; }
 .verdict.ok { background: var(--passed-soft); }
-.verdictT { font-size: 22px; font-weight: 600; }
+.verdictT { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
 .srow { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 14px; border-bottom: 1px solid var(--soft); font-size: 12.5px; }
 .srow:last-child { border-bottom: 0; }
 
 /* Test health badges */
-.hb { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 4px; font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+.hb { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: var(--r-xs); font-size: 11.5px; font-weight: 500; white-space: nowrap; }
 .always_failing { background: var(--failed-soft); color: var(--failed); }
 .flaky { background: var(--retest-soft); color: var(--retest); }
 .needs_review { background: var(--blocked-soft); color: var(--blocked); }
 .stale { background: var(--skipped-soft); color: var(--text2); }
 
 /* Build compare category chips */
-.cchip { height: 30px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); cursor: pointer; font-size: 12.5px; color: var(--text2); }
+.cchip { height: 30px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--panel); cursor: pointer; font-size: 12.5px; color: var(--text2); }
 .cchip b { font-family: var(--font-cond), sans-serif; font-size: 16px; color: var(--text); }
+.cchip:hover { border-color: var(--border-strong); color: var(--text); }
 .cchip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
 
 /* Workload */
 .wkr { display: grid; grid-template-columns: 180px minmax(0, 1fr) 120px 110px 90px; align-items: center; gap: 14px; height: 40px; padding: 0 14px; border-bottom: 1px solid var(--soft); font-size: 12.5px; min-width: 700px; }
 .wkh { height: 30px; font-size: 11.5px; color: var(--text3); }
 .wkr.over { background: var(--failed-soft); }
-.wb { position: relative; height: 10px; border-radius: 3px; background: var(--raised2); }
-.wb i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--accent); }
+.wb { position: relative; height: 10px; border-radius: var(--r-xs); background: var(--raised2); }
+.wb i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--r-xs); background: var(--accent); }
 .wb .cap { top: -4px; bottom: -4px; width: 2px; border-radius: 0; background: var(--text); }
 .wkr.over .wb i:not(.cap) { background: var(--failed); }
 

@@ -4,6 +4,7 @@ export * from './ai';
 export * from './analytics';
 export * from './api';
 export * from './boards';
+export * from './datasets';
 export * from './docs';
 export * from './domain';
 export * from './events';

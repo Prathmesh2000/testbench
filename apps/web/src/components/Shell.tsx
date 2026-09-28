@@ -25,6 +25,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     { href: '/', label: 'Home', icon: 'home' },
     { href: '/projects', label: 'Projects', icon: 'group' },
     { href: '/cases', label: 'Test cases', icon: 'cases' },
+    { href: '/data', label: 'Test data', icon: 'rows' },
     { href: '/runs', label: 'Runs', icon: 'runs' },
     { href: '/defects', label: 'Defects', icon: 'bug' },
   ] },
@@ -96,6 +97,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <header className="top">
         <button className="ib show-phone" aria-label="Open navigation" onClick={() => setNavOpen((o) => !o)}><Icon name="menu" /></button>
         <Link href="/" className="logo"><span className="mk"><Icon name="check" size={14} /></span><b>Testbench</b></Link>
+        <span className="crumb hide-phone" aria-hidden="true">/</span>
         <ProjectSwitcher />
         <button className="cmdk" onClick={() => setOverlay('palette')} aria-label="Search and commands">
           <Icon name="search" size={14} />
@@ -103,14 +105,12 @@ export function Shell({ children }: { children: ReactNode }) {
           <span className="kbd hide-phone">Ctrl K</span>
         </button>
         <div className="f1" />
-        <button className="ib" aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`} onClick={() => setOverlay(overlay === 'bell' ? null : 'bell')}>
+        <button className="ib" aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`} title="Notifications" onClick={() => setOverlay(overlay === 'bell' ? null : 'bell')}>
           <Icon name="bell" />
           {unread > 0 && <span className="bellc">{unread > 99 ? '99+' : unread}</span>}
         </button>
-        <button className="ib" aria-label={`Switch to ${prefs.theme === 'dark' ? 'light' : 'dark'} theme`} onClick={prefs.toggleTheme}><Icon name={prefs.theme === 'dark' ? 'sun' : 'moon'} /></button>
-        <button className="ib hide-phone" aria-label={`Switch to ${prefs.density === 'compact' ? 'comfortable' : 'compact'} rows`} title="Row density" onClick={prefs.toggleDensity}><Icon name="rows" /></button>
-        <button className="ib hide-phone" aria-label="Keyboard shortcuts" onClick={() => setOverlay('keys')}><Icon name="keyboard" /></button>
-        <button className="ib" aria-label="Account" onClick={() => setOverlay(overlay === 'user' ? null : 'user')}><Avatar user={me.user} /></button>
+        <button className="ib" aria-label={`Switch to ${prefs.theme === 'dark' ? 'light' : 'dark'} theme`} title="Theme" onClick={prefs.toggleTheme}><Icon name={prefs.theme === 'dark' ? 'sun' : 'moon'} /></button>
+        <button className="ib acct" aria-label="Account" aria-haspopup="menu" aria-expanded={overlay === 'user'} onClick={() => setOverlay(overlay === 'user' ? null : 'user')}><Avatar user={me.user} /></button>
       </header>
 
       <div className="app-body">
@@ -127,6 +127,12 @@ export function Shell({ children }: { children: ReactNode }) {
               ))}
             </div>
           ))}
+          <div className="nav-foot hide-tab">
+            <button className="ni" onClick={prefs.toggleNav} aria-label={prefs.nav === 'mini' ? 'Expand navigation' : 'Collapse navigation'} title={prefs.nav === 'mini' ? 'Expand navigation' : 'Collapse navigation'}>
+              <Icon name={prefs.nav === 'mini' ? 'chevRight' : 'chevLeft'} />
+              <span className="nl">Collapse</span>
+            </button>
+          </div>
         </nav>
         <main className="app-main">{children}</main>
       </div>
@@ -156,13 +162,22 @@ export function Shell({ children }: { children: ReactNode }) {
       {overlay === 'user' && (
         <>
           <div className="scrim" style={{ background: 'transparent' }} onClick={() => setOverlay(null)} />
-          <div className="menu" style={{ position: 'fixed', top: 44, right: 10, width: 240 }} role="menu">
-            <div style={{ padding: '8px 8px 10px' }}>
-              <div style={{ fontWeight: 600 }}>{me.user.name}</div>
-              <div className="t3" style={{ fontSize: 12 }}>{me.user.email}</div>
+          <div className="menu" style={{ position: 'fixed', top: 50, right: 10, width: 260 }} role="menu">
+            <div className="umenu-h">
+              <Avatar user={me.user} large />
+              <div className="col" style={{ minWidth: 0 }}>
+                <div className="trunc" style={{ fontWeight: 600 }}>{me.user.name}</div>
+                <div className="t3 trunc" style={{ fontSize: 12 }}>{me.user.email}</div>
+              </div>
             </div>
+            <div className="msep" />
+            <button className="mi" role="menuitem" onClick={prefs.toggleTheme}><Icon name={prefs.theme === 'dark' ? 'sun' : 'moon'} />{prefs.theme === 'dark' ? 'Light' : 'Dark'} theme</button>
+            <button className="mi" role="menuitem" onClick={prefs.toggleDensity}><Icon name="rows" />{prefs.density === 'compact' ? 'Comfortable' : 'Compact'} rows</button>
+            <button className="mi" role="menuitem" onClick={() => setOverlay('keys')}><Icon name="keyboard" />Keyboard shortcuts<span className="kbd">?</span></button>
+            <Link className="mi" role="menuitem" href="/settings" onClick={() => setOverlay(null)}><Icon name="gear" />Settings</Link>
+            <div className="msep" />
             <form action="/auth/logout" method="post">
-              <button className="mi" type="submit"><Icon name="signout" />Sign out</button>
+              <button className="mi" type="submit" role="menuitem"><Icon name="signout" />Sign out</button>
             </form>
           </div>
         </>

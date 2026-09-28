@@ -22,7 +22,7 @@
 .cs[open] > summary::before { transform: rotate(45deg); }
 .ai { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--soft); font-size: 12.5px; }
 
-.people { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 32px; padding: 4px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); }
+.people { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 32px; padding: 4px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--field); }
 .people:focus-within { border-color: var(--accent); }
 .unpick { display: inline-flex; border: 0; background: transparent; color: var(--text3); padding: 0; cursor: pointer; }
 .unpick:hover { color: var(--text); }

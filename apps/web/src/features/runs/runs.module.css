@@ -1,15 +1,15 @@
 /* Create run, from the canvas artboard CreateRun.dc.html. */
 .wizard { flex: 1; display: flex; min-height: 0; }
 .stepsNav { width: 200px; flex: none; padding: 16px 8px; border-right: 1px solid var(--border); background: var(--panel); display: flex; flex-direction: column; gap: 2px; }
-.stepLink { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: 5px; color: var(--text2) !important; text-decoration: none !important; font-size: 13px; }
+.stepLink { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: var(--r-sm); color: var(--text2) !important; text-decoration: none !important; font-size: 13px; }
 .stepLink:hover { background: var(--raised); color: var(--text) !important; }
 .stepNo { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border); display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-mono), monospace; font-size: 11px; }
 .form { flex: 1; overflow: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; max-width: 980px; scroll-behavior: smooth; }
 .sec { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.count { display: flex; gap: 6px; align-items: baseline; font-size: 13px; padding: 8px 10px; border-radius: 6px; background: var(--raised); }
+.count { display: flex; gap: 6px; align-items: baseline; font-size: 13px; padding: 8px 10px; border-radius: var(--r-sm); background: var(--raised); }
 .people { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
-.person { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 12.5px; }
+.person { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-sm); cursor: pointer; font-size: 12.5px; }
 .person:hover { background: var(--hover); }
 .personOn { border-color: var(--accent); background: var(--accent-soft); }
 

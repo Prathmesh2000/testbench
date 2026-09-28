@@ -6,7 +6,15 @@ import s from './defects.module.css';
 
 /** Jira status as a coloured pill. Colours follow the status category; names come from Jira as-is. */
 export function JiraStatus({ status, category }: { status: string; category: DefectRow['statusCategory'] }) {
-  const tone = category === 'done' ? s.done : /review/i.test(status) ? s.rev : category === 'indeterminate' ? s.prog : /reopen/i.test(status) ? s.reop : s.todo;
+  // Colour follows Jira's category; a few status names that matter to testers get their own tone.
+  const tone =
+    /won.?t|cancel|duplicate|reject/i.test(status) ? s.wont
+    : category === 'done' ? s.done
+    : /block/i.test(status) ? s.reop
+    : /review|qa|test/i.test(status) ? s.rev
+    : category === 'indeterminate' ? s.prog
+    : /reopen/i.test(status) ? s.reop
+    : s.todo;
   return <span className={`${s.js} ${tone}`}>{status}</span>;
 }
 

@@ -372,6 +372,8 @@ export interface CaseDetail extends CaseRow {
   usedBy: { key: string; title: string }[];
   recentResults: CaseResultRef[];
   createdAt: string;
+  /** Set when the case runs once per row of a data set. */
+  dataSet: { id: string; name: string; rowCount: number } | null;
 }
 
 export interface JobStatus {
@@ -417,6 +419,9 @@ export interface RunItemRow {
   assignee: UserRef | null;
   blockedReason: string | null;
   position: number;
+  /** For data-driven cases: which row of the data set this item runs (0-based), and its values. */
+  dataRow: number | null;
+  data: Record<string, string> | null;
 }
 
 export interface Evidence {
@@ -556,11 +561,17 @@ export const DefectListQuery = z.object({
   view: z.enum(['all', 'retest', 'mine']).default('all'),
   status: z.enum(['open', 'done', 'any']).default('any'),
   caseId: z.uuid().optional(),
+  /** An exact Jira status name, e.g. "In QA"; narrower than `status`, which is the category. */
+  jiraStatus: z.string().trim().max(60).optional(),
+  /** Bugs by default: the tracker is about defects, while stories and tasks are linked from cases. */
+  type: z.enum(['bugs', 'all']).default('bugs'),
 });
 
 export interface DefectRow {
   id: string;
   jiraKey: string;
+  /** Bug, Story, Task, Epic… as Jira names it. */
+  issueType: string;
   jiraUrl: string;
   summary: string;
   status: string;
@@ -615,4 +626,34 @@ export interface SyncStatus {
   connected: boolean;
   lastSyncAt: string | null;
   lastError: string | null;
+}
+
+// ---------- Jira issues linked to cases ----------
+
+export const LinkIssueBody = z.object({
+  jiraKey: z
+    .string()
+    .trim()
+    .regex(/^[A-Z][A-Z0-9]*-\d+$/i, 'Use a Jira key such as PAY-4821'),
+});
+
+export interface CaseJiraLink {
+  id: string;
+  jiraKey: string;
+  jiraUrl: string;
+  issueType: string;
+  summary: string;
+  /** The status exactly as named in the Jira workflow ("In QA", "Won't Do"). */
+  status: string;
+  statusCategory: 'new' | 'indeterminate' | 'done';
+  assignee: string | null;
+  fixVersion: string | null;
+  /** "case" when linked to the case directly, "run" when logged or linked from a failed run item. */
+  via: ('case' | 'run')[];
+  syncedAt: string;
+}
+
+export interface JiraStatus {
+  name: string;
+  category: 'new' | 'indeterminate' | 'done';
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import type { DefectDetail, DefectRow, SyncStatus } from '@tb/contracts';
+import type { DefectDetail, DefectRow, JiraStatus as JiraStatusInfo, SyncStatus } from '@tb/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -22,14 +22,24 @@ export function DefectsScreen() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<View>('all');
   const [status, setStatus] = useState<StatusFilter>('any');
+  const [jiraStatus, setJiraStatus] = useState('');
+  const [allTypes, setAllTypes] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
   const sync = useQuery({ queryKey: ['defect-sync', project.id], queryFn: () => get<SyncStatus>(`/projects/${project.id}/defects/sync`), refetchInterval: 60_000 });
   const defects = useQuery({
-    queryKey: ['defects', project.id, view, status],
-    queryFn: () => get<DefectRow[]>(`/projects/${project.id}/defects${qs({ view, status })}`),
+    queryKey: ['defects', project.id, view, status, jiraStatus, allTypes],
+    queryFn: () =>
+      get<DefectRow[]>(`/projects/${project.id}/defects${qs({ view, status, jiraStatus: jiraStatus || undefined, type: allTypes ? 'all' : 'bugs' })}`),
     enabled: sync.data?.connected !== false,
+  });
+  // The Jira project's own workflow, so filtering uses the status names the team sees in Jira.
+  const statuses = useQuery({
+    queryKey: ['jira-statuses', project.id],
+    queryFn: () => get<JiraStatusInfo[]>(`/projects/${project.id}/jira/statuses`),
+    enabled: sync.data?.connected !== false,
+    staleTime: 10 * 60_000,
   });
   const retestCount = useQuery({
     queryKey: ['defects', project.id, 'retest', 'any'],
@@ -79,6 +89,17 @@ export function DefectsScreen() {
               ))}
             </div>
             <div className="f1" />
+            <label className="row t2" style={{ gap: 6, fontSize: 12.5 }}>
+              <input type="checkbox" className="cb" checked={allTypes} onChange={(e) => setAllTypes(e.target.checked)} />Stories and tasks too
+            </label>
+            <select className="inp" value={jiraStatus} onChange={(e) => setJiraStatus(e.target.value)} aria-label="Exact Jira status">
+              <option value="">Every Jira status</option>
+              {(['new', 'indeterminate', 'done'] as const).map((cat) => (
+                <optgroup key={cat} label={{ new: 'To do', indeterminate: 'In progress', done: 'Done' }[cat]}>
+                  {statuses.data?.filter((st) => st.category === cat).map((st) => <option key={st.name} value={st.name}>{st.name}</option>)}
+                </optgroup>
+              ))}
+            </select>
             <div className="seg" role="radiogroup" aria-label="Jira status">
               {(['open', 'done', 'any'] as StatusFilter[]).map((st) => (
                 <button key={st} role="radio" aria-checked={status === st} className={status === st ? 'on' : ''} onClick={() => setStatus(st)}>{{ open: 'Open', done: 'Done', any: 'Any status' }[st]}</button>
@@ -93,7 +114,7 @@ export function DefectsScreen() {
           </div>
           {defects.data?.map((d) => (
             <div key={d.id} role="row" className={`${s.dg} ${d.id === openId ? s.on : ''}`} onClick={() => setOpenId(d.id)}>
-              <a className="mono" href={d.jiraUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{d.jiraKey}</a>
+              <a className="mono" href={d.jiraUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title={d.issueType}>{d.jiraKey}{d.issueType !== 'Bug' && <span className="t3"> · {d.issueType}</span>}</a>
               <span className="trunc">{d.summary}</span>
               <span><JiraStatus status={d.status} category={d.statusCategory} /></span>
               <SeverityTag severity={d.severity} />

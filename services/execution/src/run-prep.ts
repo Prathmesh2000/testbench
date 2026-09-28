@@ -2,6 +2,7 @@ import { runKey, type CaseFilter, type CreateRunBody } from '@tb/contracts';
 import { badRequest, recordEvent, withTenant, type Db, type Tx } from '@tb/platform';
 import { caseFilter } from '@tb/repository';
 import { sql } from 'kysely';
+import { expandItems, loadRows } from './data-rows';
 
 // Background expansion for runs too big to create inside one request (HLD §3.1). The run is created
 // straight away in "preparing" state; a worker then writes its items chunk by chunk, so testers can
@@ -105,7 +106,7 @@ export async function prepChunk(trx: Tx, runId: string): Promise<boolean> {
   let q = trx
     .selectFrom('repo.test_case as c')
     .innerJoin('repo.module as m', 'm.id', 'c.module_id')
-    .select(['c.id', 'c.current_version', 'c.key_no', sql<string>`m.path::text`.as('path')])
+    .select(['c.id', 'c.current_version', 'c.key_no', 'c.data_set_id', sql<string>`m.path::text`.as('path')])
     .where(caseFilter(job.project_id, job.filter as CaseFilter))
     .where('c.status', '!=', 'obsolete')
     .orderBy('m.path')
@@ -116,21 +117,23 @@ export async function prepChunk(trx: Tx, runId: string): Promise<boolean> {
   }
   const cases = await q.execute();
 
-  const items = cases.flatMap((c, i) =>
-    run.configs.map((config, k) => {
-      const n = job.cases_done + i;
-      return {
-        org_id: job.org_id,
-        project_id: job.project_id,
-        run_id: runId,
-        case_id: c.id,
-        case_version: c.current_version,
-        config,
-        position: n * run.configs.length + k,
-        assignee_id: job.assignees.length ? job.assignees[n % job.assignees.length]! : null,
-      };
-    }),
-  );
+  const toRun = cases.map((c) => ({ id: c.id, version: c.current_version, dataSetId: c.data_set_id }));
+  const items = expandItems(toRun, run.configs, await loadRows(trx, toRun)).map((e) => {
+    const n = job.cases_done + e.caseIndex;
+    return {
+      org_id: job.org_id,
+      project_id: job.project_id,
+      run_id: runId,
+      case_id: e.caseId,
+      case_version: e.version,
+      config: e.config,
+      // Rows of one case share a position; lists order by (position, data_row).
+      position: n * run.configs.length + e.configIndex,
+      assignee_id: job.assignees.length ? job.assignees[n % job.assignees.length]! : null,
+      data_row: e.dataRow,
+      data: e.data ? JSON.stringify(e.data) : null,
+    };
+  });
   for (let i = 0; i < items.length; i += 1_000) {
     await trx
       .insertInto('exec.run_item')

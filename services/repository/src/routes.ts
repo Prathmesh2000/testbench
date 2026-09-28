@@ -4,6 +4,9 @@ import {
   CaseGroupQuery,
   CaseListQuery,
   CreateCaseBody,
+  CaseDataSetBody,
+  DataFileBody,
+  DataSetBody,
   ProjectBody,
   ProjectPatch,
   SetDependenciesBody,
@@ -29,6 +32,16 @@ import {
 } from './cases';
 import { loadModules, toTree } from './modules';
 import { createModule, createProject, projectOverview, renameModule } from './projects';
+import {
+  addDataFile,
+  dataResults,
+  deleteDataFile,
+  deleteDataSet,
+  getDataSet,
+  listDataSets,
+  saveDataSet,
+  setCaseDataSet,
+} from './datasets';
 import { diffSteps } from './step-diff';
 
 const Project = z.object({ projectId: z.uuid() });
@@ -44,8 +57,86 @@ function requirePermissionOn(req: FastifyRequest, projectId: string): void {
   if (visible && !visible.includes(projectId)) throw notFound('Project');
 }
 
-export const repositoryRoutes: FastifyPluginAsync<ServiceDeps> = async (app, { db }) => {
+export const repositoryRoutes: FastifyPluginAsync<ServiceDeps> = async (app, { db, storage }) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
+
+  // ---------- data sets ----------
+  const DataSet = Project.extend({ dataSetId: z.uuid() });
+  r.get('/projects/:projectId/data-sets', { schema: { params: Project } }, async (req) =>
+    projectTx(db, req, req.params.projectId, 'case.read', (trx) => listDataSets(trx, req.params.projectId)),
+  );
+  r.post(
+    '/projects/:projectId/data-sets',
+    { schema: { params: Project, body: DataSetBody } },
+    async (req, reply) =>
+      reply
+        .status(201)
+        .send(
+          await projectTx(db, req, req.params.projectId, 'case.write', (trx) =>
+            saveDataSet(trx, actorOf(req), req.params.projectId, null, req.body),
+          ),
+        ),
+  );
+  r.get('/projects/:projectId/data-sets/:dataSetId', { schema: { params: DataSet } }, async (req) =>
+    projectTx(db, req, req.params.projectId, 'case.read', (trx) =>
+      getDataSet(trx, storage, req.params.projectId, req.params.dataSetId),
+    ),
+  );
+  r.put(
+    '/projects/:projectId/data-sets/:dataSetId',
+    { schema: { params: DataSet, body: DataSetBody } },
+    async (req) =>
+      projectTx(db, req, req.params.projectId, 'case.write', (trx) =>
+        saveDataSet(trx, actorOf(req), req.params.projectId, req.params.dataSetId, req.body),
+      ),
+  );
+  r.delete(
+    '/projects/:projectId/data-sets/:dataSetId',
+    { schema: { params: DataSet } },
+    async (req, reply) => {
+      await projectTx(db, req, req.params.projectId, 'case.write', (trx) =>
+        deleteDataSet(trx, req.params.projectId, req.params.dataSetId),
+      );
+      return reply.status(204).send();
+    },
+  );
+  r.post(
+    '/projects/:projectId/data-sets/:dataSetId/files',
+    { schema: { params: DataSet, body: DataFileBody } },
+    async (req, reply) =>
+      reply
+        .status(201)
+        .send(
+          await projectTx(db, req, req.params.projectId, 'case.write', (trx) =>
+            addDataFile(trx, storage, actorOf(req), req.params.projectId, req.params.dataSetId, req.body),
+          ),
+        ),
+  );
+  r.delete(
+    '/projects/:projectId/data-sets/:dataSetId/files/:fileId',
+    { schema: { params: DataSet.extend({ fileId: z.uuid() }) } },
+    async (req, reply) => {
+      await projectTx(db, req, req.params.projectId, 'case.write', (trx) =>
+        deleteDataFile(trx, req.params.projectId, req.params.dataSetId, req.params.fileId),
+      );
+      return reply.status(204).send();
+    },
+  );
+  r.put(
+    '/projects/:projectId/cases/:key/data-set',
+    { schema: { params: CaseParams, body: CaseDataSetBody } },
+    async (req, reply) => {
+      await projectTx(db, req, req.params.projectId, 'case.write', (trx) =>
+        setCaseDataSet(trx, actorOf(req), req.params.projectId, req.params.key, req.body.dataSetId),
+      );
+      return reply.status(204).send();
+    },
+  );
+  r.get('/projects/:projectId/cases/:key/data-results', { schema: { params: CaseParams } }, async (req) =>
+    projectTx(db, req, req.params.projectId, 'run.read', (trx) =>
+      dataResults(trx, req.params.projectId, req.params.key),
+    ),
+  );
 
   // ---------- projects ----------
   r.get('/projects/overview', async (req) =>

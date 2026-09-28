@@ -1,8 +1,10 @@
 import {
   caseKey,
   runKey,
+  type CaseJiraLink,
   type DefectDetail,
   type DefectRow,
+  type JiraStatus,
   type Result,
   type Severity,
   type SimilarDefect,
@@ -53,6 +55,7 @@ function defectRows(trx: Tx, projectId: string) {
     .select([
       'd.id',
       'd.jira_key',
+      'd.issue_type',
       'd.summary',
       'd.status',
       'd.status_category',
@@ -83,17 +86,28 @@ type DefectRecord = Awaited<ReturnType<ReturnType<typeof defectRows>['executeTak
 
 async function withCases(trx: Tx, jira: JiraClient, rows: DefectRecord[]): Promise<DefectRow[]> {
   if (!rows.length) return [];
+  const ids = rows.map((r) => r.id);
+  // Cases a defect touches: through failed run items, and linked to the case directly.
   const links = await trx
     .selectFrom('defect.item_link as l')
     .innerJoin('repo.test_case as c', 'c.id', 'l.case_id')
     .select(['l.defect_id', 'c.key_no', 'c.title'])
-    .distinct()
-    .where('l.defect_id', '=', (eb) => eb.fn.any(eb.val(rows.map((r) => r.id))))
+    .where('l.defect_id', '=', (eb) => eb.fn.any(eb.val(ids)))
+    .union((eb) =>
+      eb
+        .selectFrom('defect.case_link as k')
+        .innerJoin('repo.test_case as c', (j) =>
+          j.onRef('c.id', '=', 'k.case_id').onRef('c.project_id', '=', 'k.project_id'),
+        )
+        .select(['k.defect_id', 'c.key_no', 'c.title'])
+        .where('k.defect_id', '=', (w) => w.fn.any(w.val(ids))),
+    )
     .execute();
   return rows.map((r) => ({
     id: r.id,
     jiraKey: r.jira_key,
     jiraUrl: jira.browseUrl(r.jira_key),
+    issueType: r.issue_type,
     summary: r.summary,
     status: r.status,
     statusCategory: r.status_category as DefectRow['statusCategory'],
@@ -115,7 +129,13 @@ export async function listDefects(
   jira: JiraClient,
   caller: Caller,
   projectId: string,
-  q: { view: 'all' | 'retest' | 'mine'; status: 'open' | 'done' | 'any'; caseId?: string },
+  q: {
+    view: 'all' | 'retest' | 'mine';
+    status: 'open' | 'done' | 'any';
+    caseId?: string;
+    jiraStatus?: string;
+    type?: 'bugs' | 'all';
+  },
 ): Promise<DefectRow[]> {
   let query = defectRows(trx, projectId).orderBy('d.created_at', 'desc').limit(500);
   if (q.view === 'mine') query = query.where('d.created_by', '=', caller.userId);
@@ -132,15 +152,26 @@ export async function listDefects(
   }
   if (q.status === 'open') query = query.where('d.status_category', '!=', 'done');
   if (q.status === 'done') query = query.where('d.status_category', '=', 'done');
+  if (q.jiraStatus) query = query.where('d.status', '=', q.jiraStatus);
+  if (q.type !== 'all') query = query.where('d.issue_type', '=', 'Bug');
   if (q.caseId)
     query = query.where((eb) =>
-      eb.exists(
-        eb
-          .selectFrom('defect.item_link as l')
-          .select('l.defect_id')
-          .whereRef('l.defect_id', '=', 'd.id')
-          .where('l.case_id', '=', q.caseId!),
-      ),
+      eb.or([
+        eb.exists(
+          eb
+            .selectFrom('defect.item_link as l')
+            .select('l.defect_id')
+            .whereRef('l.defect_id', '=', 'd.id')
+            .where('l.case_id', '=', q.caseId!),
+        ),
+        eb.exists(
+          eb
+            .selectFrom('defect.case_link as k')
+            .select('k.defect_id')
+            .whereRef('k.defect_id', '=', 'd.id')
+            .where('k.case_id', '=', q.caseId!),
+        ),
+      ]),
     );
   return withCases(trx, jira, await query.execute());
 }
@@ -592,6 +623,7 @@ export async function applyIssue(
       status_category: category,
       assignee_name: issue.fields.assignee?.displayName ?? null,
       fix_version: issue.fields.fixVersions?.[0]?.name ?? null,
+      ...(issue.fields.issuetype && { issue_type: issue.fields.issuetype.name }),
       jira_updated_at: issue.fields.updated,
       synced_at: new Date(),
     })
@@ -794,4 +826,138 @@ export async function recordRetest(
     actor: caller.userId,
     data: { retest_id: retestId, defect_id: retest.defect_id, status: body.status },
   });
+}
+
+// ---------- Jira issues linked to cases ----------
+
+const linkedDirectly = (caseId: string) =>
+  sql<boolean>`EXISTS (SELECT 1 FROM defect.case_link k WHERE k.defect_id = d.id AND k.case_id = ${caseId})`;
+const linkedFromRun = (caseId: string) =>
+  sql<boolean>`EXISTS (SELECT 1 FROM defect.item_link l WHERE l.defect_id = d.id AND l.case_id = ${caseId})`;
+
+/**
+ * Every Jira issue connected to a case, with its live status: issues linked to the case directly
+ * (stories, tasks, epics, bugs) and bugs logged or linked from its failed run items.
+ */
+export async function caseIssues(
+  trx: Tx,
+  jira: JiraClient,
+  projectId: string,
+  caseId: string,
+): Promise<CaseJiraLink[]> {
+  const rows = await trx
+    .selectFrom('defect.defect as d')
+    .select([
+      'd.id',
+      'd.jira_key',
+      'd.issue_type',
+      'd.summary',
+      'd.status',
+      'd.status_category',
+      'd.assignee_name',
+      'd.fix_version',
+      'd.synced_at',
+      linkedDirectly(caseId).as('direct'),
+      linkedFromRun(caseId).as('from_run'),
+    ])
+    .where('d.project_id', '=', projectId)
+    .where(sql<boolean>`(${linkedDirectly(caseId)} OR ${linkedFromRun(caseId)})`)
+    .orderBy('d.created_at', 'desc')
+    .execute();
+  return rows.map((r) => ({
+    id: r.id,
+    jiraKey: r.jira_key,
+    jiraUrl: jira.browseUrl(r.jira_key),
+    issueType: r.issue_type,
+    summary: r.summary,
+    status: r.status,
+    statusCategory: r.status_category as CaseJiraLink['statusCategory'],
+    assignee: r.assignee_name,
+    fixVersion: r.fix_version,
+    via: [...(r.direct ? (['case'] as const) : []), ...(r.from_run ? (['run'] as const) : [])],
+    syncedAt: r.synced_at.toISOString(),
+  }));
+}
+
+/** Links any Jira issue to a case; from then on it stays in sync like every other linked issue. */
+export async function linkIssueToCase(
+  trx: Tx,
+  jira: JiraClient,
+  caller: Caller,
+  projectId: string,
+  caseId: string,
+  jiraKey: string,
+): Promise<void> {
+  const issue = await jiraCall(() => jira.getIssue(jiraKey.toUpperCase()));
+  const fields = {
+    summary: issue.fields.summary,
+    status: issue.fields.status.name,
+    status_category: issue.fields.status.statusCategory.key,
+    issue_type: issue.fields.issuetype?.name ?? 'Bug',
+    assignee_name: issue.fields.assignee?.displayName ?? null,
+    fix_version: issue.fields.fixVersions?.[0]?.name ?? null,
+    jira_updated_at: issue.fields.updated,
+  };
+  const { id } = await trx
+    .insertInto('defect.defect')
+    .values({
+      org_id: caller.orgId,
+      project_id: projectId,
+      jira_key: issue.key,
+      jira_id: issue.id,
+      created_by: caller.userId,
+      ...fields,
+    })
+    .onConflict((oc) =>
+      oc.columns(['project_id', 'jira_key']).doUpdateSet({ ...fields, synced_at: new Date() }),
+    )
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  const linked = await trx
+    .insertInto('defect.case_link')
+    .values({
+      defect_id: id,
+      case_id: caseId,
+      org_id: caller.orgId,
+      project_id: projectId,
+      linked_by: caller.userId,
+    })
+    .onConflict((oc) => oc.doNothing())
+    .returning('defect_id')
+    .executeTakeFirst();
+  if (!linked) throw badRequest(`${issue.key} is already linked to this case.`);
+  await recordEvent(trx, {
+    type: 'defect.linked',
+    orgId: caller.orgId,
+    projectId,
+    actor: caller.userId,
+    data: { defect_id: id, jira_key: issue.key, case_id: caseId, direct: true },
+  });
+}
+
+export async function unlinkIssueFromCase(
+  trx: Tx,
+  projectId: string,
+  caseId: string,
+  defectId: string,
+): Promise<void> {
+  const gone = await trx
+    .deleteFrom('defect.case_link')
+    .where('defect_id', '=', defectId)
+    .where('case_id', '=', caseId)
+    .where('project_id', '=', projectId)
+    .returning('defect_id')
+    .executeTakeFirst();
+  if (!gone) throw notFound('Link');
+}
+
+/** The Jira project's workflow statuses, de-duplicated across issue types, in workflow order. */
+export async function jiraStatuses(trx: Tx, jira: JiraClient, projectId: string): Promise<JiraStatus[]> {
+  const key = await projectKey(trx, projectId);
+  const types = await jiraCall(() => jira.projectStatuses(key));
+  const seen = new Map<string, JiraStatus>();
+  for (const t of types)
+    for (const st of t.statuses)
+      if (!seen.has(st.name)) seen.set(st.name, { name: st.name, category: st.statusCategory.key });
+  return [...seen.values()];
 }

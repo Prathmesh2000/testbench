@@ -13,11 +13,16 @@ const WEBHOOK_SECRET = process.env.JIRA_WEBHOOK_SECRET ?? '';
 const DATA = process.env.JIRA_DATA ?? './issues.json';
 const PORT = 8090;
 
+// A realistic team workflow, so Testbench shows every status name as Jira has it, not only the three categories.
 const STATUSES = {
   11: { name: 'To Do', category: 'new' },
+  15: { name: 'Reopened', category: 'new' },
   21: { name: 'In Progress', category: 'indeterminate' },
+  25: { name: 'Blocked', category: 'indeterminate' },
   31: { name: 'In Review', category: 'indeterminate' },
+  35: { name: 'In QA', category: 'indeterminate' },
   41: { name: 'Done', category: 'done' },
+  51: { name: "Won't Do", category: 'done' },
 };
 const statusField = (id) => ({ id: String(id), name: STATUSES[id].name, statusCategory: { key: STATUSES[id].category, name: STATUSES[id].category === 'done' ? 'Done' : STATUSES[id].category === 'new' ? 'To Do' : 'In Progress' } });
 const DEVELOPERS = ['Aman Tiwari', 'Farhan Qureshi', 'Lakshmi Ramesh', 'Gaurav Sethi', 'Shruti Bhat', 'Omkar Patil'];
@@ -40,6 +45,24 @@ if (!db) {
   for (const summary of existing) createIssue({ project: { key: 'PAY' }, summary, issuetype: { name: 'Bug' }, priority: { name: 'Major' }, labels: ['legacy'] }, true);
   save();
 }
+// Stories and tasks to link test cases to (the bugs above come from runs). Added once, also to older data files.
+if (!db.seededWork) {
+  const work = [
+    ['Story', 'UPI Autopay: pause a mandate for up to 90 days', 21],
+    ['Story', 'Checkout 2.0: pay with a saved card in one tap', 31],
+    ['Story', 'Refunds revamp: instant refunds to the source account', 35],
+    ['Story', 'Video KYC: reconnect after a dropped call', 11],
+    ['Task', 'Set up UAT merchant accounts for release 4.18', 41],
+    ['Epic', 'Release 4.18: Payments web', 21],
+  ];
+  for (const [type, summary, status] of work) {
+    const issue = createIssue({ project: { key: 'PAY' }, summary, issuetype: { name: type }, priority: { name: 'Major' }, labels: ['roadmap'] }, true);
+    issue.fields.status = statusField(status);
+  }
+  db.seededWork = true;
+  save();
+}
+
 function save() {
   writeFileSync(DATA, JSON.stringify(db, null, 2));
 }
@@ -158,6 +181,12 @@ createServer(async (req, res) => {
     if (path === '/rest/api/3/search/jql' && req.method === 'POST') {
       const issues = Object.values(db.issues).filter((i) => matches(i, body.jql ?? '')).sort((a, b) => b.fields.updated.localeCompare(a.fields.updated));
       return json(res, 200, { issues: issues.slice(0, body.maxResults ?? 50), isLast: true });
+    }
+    // Every status of every issue type in a project, as Jira Cloud's project statuses endpoint returns them.
+    const ps = /^\/rest\/api\/3\/project\/([A-Z][A-Z0-9]*)\/statuses$/.exec(path);
+    if (ps && req.method === 'GET') {
+      const statuses = Object.keys(STATUSES).map((id) => statusField(Number(id)));
+      return json(res, 200, ['Bug', 'Story', 'Task', 'Epic'].map((name, i) => ({ id: String(10001 + i), name, statuses })));
     }
     const m = /^\/rest\/api\/3\/issue\/([A-Z][A-Z0-9]*-\d+)(\/comment|\/transitions)?$/.exec(path);
     if (m) {

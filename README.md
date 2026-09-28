@@ -20,6 +20,10 @@ Built so far:
   providers, the audit log), personal access tokens, the MCP server for Claude and other agents, and the Slack bot.
 - **Projects**: many projects per organisation, grouped by product line; a switcher in the top bar, a portfolio
   page with each project's health, creating projects (optionally copying another's module tree) and archiving.
+- **Data-driven testing and Jira links**: a test data library (tables typed in, pasted from a spreadsheet or
+  imported from CSV/JSON, plus supporting files). A case linked to a data set runs once per row, with `{{column}}`
+  placeholders filled in its steps and a per-row result history. Any Jira issue (story, task, epic, bug) can be
+  linked to a case and shows its live workflow status; the defect tracker filters by exact Jira status.
 - **M5 (part 2)**: live boards (documents on TipTap, sheets, Excalidraw whiteboards) synced with Yjs through a
   Hocuspocus collaboration server, and meetings with calendar invites, live notes and action items that become
   test cases.

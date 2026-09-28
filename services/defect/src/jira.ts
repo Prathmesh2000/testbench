@@ -15,8 +15,14 @@ export interface JiraIssue {
     status: { name: string; statusCategory: { key: 'new' | 'indeterminate' | 'done' } };
     assignee?: { displayName: string } | null;
     fixVersions?: { name: string }[];
+    issuetype?: { name: string };
     updated: string;
   };
+}
+
+export interface JiraStatusInfo {
+  name: string;
+  statusCategory: { key: 'new' | 'indeterminate' | 'done' };
 }
 
 export class JiraError extends Error {
@@ -29,7 +35,7 @@ export class JiraError extends Error {
   }
 }
 
-const FIELDS = ['summary', 'status', 'assignee', 'fixVersions', 'updated'];
+const FIELDS = ['summary', 'status', 'assignee', 'fixVersions', 'issuetype', 'updated'];
 const MAX_CONCURRENT = 4;
 const TIMEOUT_MS = 10_000;
 
@@ -125,6 +131,14 @@ export class JiraClient {
       fields: FIELDS,
       maxResults,
     });
+  }
+
+  /** Every status of every issue type in a Jira project: the workflow as that team configured it. */
+  projectStatuses(projectKey: string) {
+    return this.request<{ name: string; statuses: JiraStatusInfo[] }[]>(
+      'GET',
+      `/rest/api/3/project/${encodeURIComponent(projectKey)}/statuses`,
+    );
   }
 
   comment(key: string, body: AdfDoc) {

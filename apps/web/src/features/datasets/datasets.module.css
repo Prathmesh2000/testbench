@@ -1,0 +1,33 @@
+/* Test data library: list of data sets on the left, the table editor on the right. */
+.layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); height: 100%; min-height: 0; }
+.list { display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--panel); min-height: 0; }
+.item { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--soft); background: transparent; text-align: left; cursor: pointer; font-size: 12.5px; color: var(--text); }
+.item:hover { background: var(--hover); }
+.item.on { background: var(--sel); box-shadow: inset 2px 0 0 var(--accent); }
+.item .t3 { font-size: 11.5px; }
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.editor { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.head { display: flex; gap: 12px; padding: 14px 16px 10px; border-bottom: 1px solid var(--border); }
+.title { height: 34px; font-size: 16px; font-weight: 600; }
+.gridWrap { flex: 1; overflow: auto; padding: 12px 16px; min-height: 0; }
+.grid { border-collapse: separate; border-spacing: 0; font-size: 12.5px; min-width: 100%; }
+.grid th, .grid td { border-right: 1px solid var(--soft); border-bottom: 1px solid var(--soft); padding: 0; background: var(--panel); }
+.grid th { position: sticky; top: 0; z-index: 1; background: var(--raised); text-align: left; padding: 4px 6px; vertical-align: top; min-width: 150px; }
+.grid tr > :first-child { border-left: 1px solid var(--soft); }
+.grid thead tr:first-child > * { border-top: 1px solid var(--soft); }
+.colName { width: 100%; border: 0; background: transparent; color: var(--text); font-weight: 600; font-size: 12.5px; padding: 2px 0; }
+.placeholder { font-family: var(--font-mono), monospace; font-size: 10.5px; color: var(--text3); }
+.cell { width: 100%; height: 30px; border: 0; background: transparent; color: var(--text); padding: 0 8px; font-size: 12.5px; }
+.cell:focus, .colName:focus { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--bg); }
+.rowNo { width: 44px; min-width: 44px !important; text-align: right; padding: 0 8px !important; color: var(--text3); font-family: var(--font-mono), monospace; font-size: 11px; white-space: nowrap; position: relative; }
+.delRow { display: none; position: absolute; left: 2px; top: 5px; }
+.grid tr:hover .delRow { display: inline-flex; }
+.add { min-width: 36px !important; width: 36px; }
+.foot { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 12px 16px 16px; border-top: 1px solid var(--border); background: var(--panel); max-height: 34%; overflow: auto; }
+.file { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 0; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .list { max-height: 40vh; }
+  .foot { grid-template-columns: minmax(0, 1fr); }
+}
