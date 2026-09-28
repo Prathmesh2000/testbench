@@ -230,6 +230,9 @@ export interface ProjectSummary {
   id: string;
   key: string;
   name: string;
+  /** Product line or team the project belongs to, e.g. "Payments"; null when ungrouped. */
+  group: string | null;
+  archived: boolean;
   permissions: Permission[];
 }
 
@@ -237,6 +240,55 @@ export interface Me {
   user: UserRef;
   org: { id: string; slug: string; name: string };
   projects: ProjectSummary[];
+  /** From organisation-wide roles only: what the admin console and "New project" check. */
+  orgPermissions: Permission[];
+}
+
+const projectGroup = z.string().trim().min(1).max(60);
+
+export const ProjectBody = z.object({
+  key: z
+    .string()
+    .trim()
+    .transform((k) => k.toUpperCase())
+    .pipe(
+      z
+        .string()
+        .regex(
+          /^[A-Z][A-Z0-9]{1,9}$/,
+          'Keys are 2-10 letters or digits, starting with a letter, such as KYC',
+        ),
+    ),
+  name: z.string().trim().min(1).max(120),
+  group: projectGroup.nullable().default(null),
+  description: z.string().trim().max(500).default(''),
+  /** Copy this project's module tree (not its cases), so a new product starts with the same structure. */
+  copyModulesFrom: z.uuid().optional(),
+});
+
+export const ProjectPatch = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  group: projectGroup.nullable().optional(),
+  description: z.string().trim().max(500).optional(),
+  archived: z.boolean().optional(),
+});
+
+export interface ProjectOverview {
+  id: string;
+  key: string;
+  name: string;
+  group: string | null;
+  description: string;
+  archived: boolean;
+  cases: number;
+  failing: number;
+  activeRuns: number;
+  /** Share of results passed in the last 30 days; null with no results. */
+  passRate: number | null;
+  openDefects: number;
+  lastActivity: string | null;
+  /** People with a role on this project specifically (org-wide roles cover every project). */
+  members: number;
 }
 
 export interface Member {

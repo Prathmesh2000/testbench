@@ -249,3 +249,47 @@ export function makeSteps(rand: () => number, leaf: string, behaviour: string): 
   for (let i = 0; i < extra; i++) steps.push({ action: pick(ACTIONS), expected: pick(EXPECTED), data: '' });
   return steps;
 }
+
+/** Smaller sibling projects, so project switching and the portfolio page have real neighbours. */
+export const SIDE_PROJECTS: {
+  key: string;
+  name: string;
+  group: string;
+  description: string;
+  cases: number;
+  tree: Record<string, Record<string, string[]>>;
+}[] = [
+  {
+    key: 'KYC',
+    name: 'Video KYC',
+    group: 'Onboarding',
+    description: 'Customer onboarding with video KYC, document capture and liveness checks.',
+    cases: 1200,
+    tree: {
+      'Video call': {
+        Scheduling: ['slot booking in the next 48 hours', 'reschedule from the SMS link'],
+        'Call quality': ['reconnect after a call drop', 'audio fallback on a weak network'],
+      },
+      Documents: {
+        Aadhaar: ['masked Aadhaar upload', 'OTP e-KYC with a linked mobile'],
+        PAN: ['PAN name match against the bank record', 'blurred PAN image is rejected'],
+      },
+      Liveness: { Checks: ['liveness check under low light', 'blink detection with spectacles'] },
+    },
+  },
+  {
+    key: 'MOB',
+    name: 'Payments Android app',
+    group: 'Payments',
+    description: 'The consumer Android app: UPI, cards and wallet on the phone.',
+    cases: 2500,
+    tree: {
+      UPI: {
+        'Scan and pay': ['scan of a static merchant QR', 'pay to a contact from the phonebook'],
+        Autopay: ['mandate pause from the app', 'pre-debit notification tap-through'],
+      },
+      Wallet: { 'Top-up': ['wallet top-up limit per month', 'top-up with a saved card'] },
+      Settings: { Security: ['app lock with biometrics', 'device binding after a SIM change'] },
+    },
+  },
+];

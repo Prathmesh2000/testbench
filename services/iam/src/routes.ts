@@ -5,7 +5,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { projectTx, tenantTx } from './access';
 import { identityCacheKey } from './identity';
-import { permissionsFor, visibleProjectIds } from './permissions';
+import { orgPermissions, permissionsFor, visibleProjectIds } from './permissions';
 
 const ProjectParams = z.object({ projectId: z.uuid() });
 const MemberParams = ProjectParams.extend({ userId: z.uuid() });
@@ -22,13 +22,24 @@ export const iamRoutes: FastifyPluginAsync<ServiceDeps> = async (app, { db, cach
         .where('id', '=', req.auth.orgId)
         .executeTakeFirstOrThrow();
       const visible = visibleProjectIds(req.auth.grants);
-      let query = trx.selectFrom('repo.project').select(['id', 'key', 'name']).orderBy('key');
+      let query = trx
+        .selectFrom('repo.project')
+        .select(['id', 'key', 'name', 'group_name', 'archived'])
+        .orderBy('key');
       if (visible) query = query.where('id', '=', (eb) => eb.fn.any(eb.val(visible)));
       const projects = await query.execute();
       return {
         user: { id: req.auth.userId, name: req.auth.name, email: req.auth.email },
         org,
-        projects: projects.map((p) => ({ ...p, permissions: permissionsFor(req.auth.grants, p.id) })),
+        projects: projects.map((p) => ({
+          id: p.id,
+          key: p.key,
+          name: p.name,
+          group: p.group_name,
+          archived: p.archived,
+          permissions: permissionsFor(req.auth.grants, p.id),
+        })),
+        orgPermissions: orgPermissions(req.auth.grants),
       };
     });
   });

@@ -7,6 +7,7 @@ import { globalAction, isTypingTarget } from '@/lib/keys';
 import { BellMenu, useInbox } from './BellMenu';
 import { CommandPalette } from './CommandPalette';
 import { Icon, type IconName } from './Icon';
+import { ProjectSwitcher } from './ProjectSwitcher';
 import { useJobs, usePrefs, useSession } from './providers';
 import { ShortcutSheet } from './ShortcutSheet';
 import { Avatar } from './status';
@@ -22,6 +23,7 @@ interface NavItem {
 const NAV: { group: string; items: NavItem[] }[] = [
   { group: 'Work', items: [
     { href: '/', label: 'Home', icon: 'home' },
+    { href: '/projects', label: 'Projects', icon: 'group' },
     { href: '/cases', label: 'Test cases', icon: 'cases' },
     { href: '/runs', label: 'Runs', icon: 'runs' },
     { href: '/defects', label: 'Defects', icon: 'bug' },
@@ -94,7 +96,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <header className="top">
         <button className="ib show-phone" aria-label="Open navigation" onClick={() => setNavOpen((o) => !o)}><Icon name="menu" /></button>
         <Link href="/" className="logo"><span className="mk"><Icon name="check" size={14} /></span><b>Testbench</b></Link>
-        <span className="proj hide-phone" title={project.name}><span className="mono t2">{project.key}</span>{project.name}</span>
+        <ProjectSwitcher />
         <button className="cmdk" onClick={() => setOverlay('palette')} aria-label="Search and commands">
           <Icon name="search" size={14} />
           <span className="ph">Jump to a case or run, or type a command</span>

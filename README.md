@@ -18,6 +18,8 @@ Built so far:
   Anthropic, xAI and offline Ollama, with per-task models, tenant policy, bring-your-own keys and token budgets.
 - **M5 (part 1)**: the admin console (members and invitations, custom roles with guardrails, integrations, AI
   providers, the audit log), personal access tokens, the MCP server for Claude and other agents, and the Slack bot.
+- **Projects**: many projects per organisation, grouped by product line; a switcher in the top bar, a portfolio
+  page with each project's health, creating projects (optionally copying another's module tree) and archiving.
 - **M5 (part 2)**: live boards (documents on TipTap, sheets, Excalidraw whiteboards) synced with Yjs through a
   Hocuspocus collaboration server, and meetings with calendar invites, live notes and action items that become
   test cases.
@@ -31,7 +33,7 @@ cp .env.example .env
 pnpm install
 pnpm infra:up             # Postgres, Valkey, Keycloak, S3, OpenSearch, Jira sandbox, DynamoDB, SQS, providers, Mailpit
 pnpm db:migrate
-pnpm seed --size dev      # 1,00,000 cases; use --size demo for 1,000
+pnpm seed --size dev      # PAY with 1,00,000 cases, plus KYC and MOB; --size demo gives PAY 1,000
 pnpm search:reindex       # builds the search index from Postgres (after every seed)
 pnpm dev                  # web :3000, core-api :4000, notification service :4100, agent gateway :4200, collaboration :4300
 ```

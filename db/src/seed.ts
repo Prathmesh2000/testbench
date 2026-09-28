@@ -10,6 +10,7 @@ import {
   LABELS,
   MODULE_TREE,
   PEOPLE,
+  SIDE_PROJECTS,
   TYPES,
   VERBS,
   makeSteps,
@@ -85,6 +86,8 @@ async function seed(): Promise<void> {
       org_id: orgId,
       key: 'PAY',
       name: 'Payments web',
+      group_name: 'Payments',
+      description: 'The merchant and consumer web checkout: UPI, cards, net banking and refunds.',
       next_case_no: 10001 + caseCount,
       next_run_no: 4 + HISTORY_RUNS,
     })
@@ -264,6 +267,12 @@ async function seed(): Promise<void> {
 
   await seedRuns(orgId, projectId, users, cases, login.id);
   await seedHistory(orgId, projectId, users, cases);
+  for (const side of SIDE_PROJECTS)
+    await seedSideProject(
+      orgId,
+      side,
+      owners.map((o) => o.id),
+    );
 
   console.log(
     `seeded ${caseCount.toLocaleString('en-IN')} cases (${size}) in ${((Date.now() - started) / 1000).toFixed(1)}s`,
@@ -393,6 +402,107 @@ async function seedRuns(
     await insertBatched('exec.run_item', items);
     await insertBatched('exec.step_result', results);
   }
+}
+
+/** A smaller project with its own module tree and cases, but no runs. */
+async function seedSideProject(
+  orgId: string,
+  side: (typeof SIDE_PROJECTS)[number],
+  ownerIds: string[],
+): Promise<void> {
+  const projectId = randomUUID();
+  await db
+    .insertInto('repo.project')
+    .values({
+      id: projectId,
+      org_id: orgId,
+      key: side.key,
+      name: side.name,
+      group_name: side.group,
+      description: side.description,
+      next_case_no: 10001 + side.cases,
+    })
+    .execute();
+  const modules: Row[] = [];
+  const leaves: { id: string; path: string; behaviours: string[] }[] = [];
+  Object.entries(side.tree).forEach(([topName, children], topPos) => {
+    const topId = randomUUID();
+    modules.push({
+      id: topId,
+      org_id: orgId,
+      project_id: projectId,
+      parent_id: null,
+      name: topName,
+      path: ltreeLabel(topId),
+      position: topPos,
+    });
+    Object.entries(children).forEach(([leafName, behaviours], pos) => {
+      const id = randomUUID();
+      modules.push({
+        id,
+        org_id: orgId,
+        project_id: projectId,
+        parent_id: topId,
+        name: leafName,
+        path: `${ltreeLabel(topId)}.${ltreeLabel(id)}`,
+        position: pos,
+      });
+      leaves.push({ id, path: `${topName} / ${leafName}`, behaviours });
+    });
+  });
+  await insertBatched('repo.module', modules);
+  const caseRows: Row[] = [];
+  const versionRows: Row[] = [];
+  for (let i = 0; i < side.cases; i++) {
+    const leaf = pick(leaves);
+    const behaviour = pick(leaf.behaviours);
+    const condition = pick(CONDITIONS);
+    const title = `${pick(VERBS)} ${behaviour}${condition ? ` ${condition}` : ''}`;
+    const id = randomUUID();
+    caseRows.push({
+      id,
+      org_id: orgId,
+      project_id: projectId,
+      key_no: 10001 + i,
+      module_id: leaf.id,
+      title,
+      priority: weighted([
+        ['P0', 8],
+        ['P1', 22],
+        ['P2', 45],
+        ['P3', 25],
+      ]),
+      type: pick(TYPES),
+      status: weighted([
+        ['ready', 75],
+        ['draft', 15],
+        ['in_review', 10],
+      ]),
+      owner_id: pick(ownerIds),
+      labels: rand() < 0.3 ? [pick(LABELS)] : [],
+      estimate_min: pick([3, 5, 8, 10]),
+      last_result: weighted([
+        ['passed', 60],
+        ['failed', 8],
+        ['untested', 32],
+      ]),
+      created_by: pick(ownerIds),
+      created_at: daysAgo(30 + Math.floor(rand() * 200)),
+      updated_at: daysAgo(Math.floor(rand() * 30)),
+    });
+    versionRows.push({
+      project_id: projectId,
+      case_id: id,
+      version: 1,
+      org_id: orgId,
+      title,
+      steps: JSON.stringify(makeSteps(rand, leaf.path, behaviour)),
+      note: 'Created',
+      author_id: pick(ownerIds),
+    });
+  }
+  await insertBatched('repo.test_case', caseRows);
+  await insertBatched('repo.case_version', versionRows);
 }
 
 const HISTORY_RUNS = 20;

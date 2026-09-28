@@ -53,7 +53,14 @@ export function toTree(rows: readonly ModuleRow[]): ModuleNode[] {
   const nodes = new Map(
     rows.map((r) => [
       r.id,
-      { id: r.id, parentId: r.parent_id, name: r.name, position: r.position, total: r.total, failing: r.failing },
+      {
+        id: r.id,
+        parentId: r.parent_id,
+        name: r.name,
+        position: r.position,
+        total: r.total,
+        failing: r.failing,
+      },
     ]),
   );
   // rows arrive in path order (parents first), so walking backwards adds each child before its parent passes it on.

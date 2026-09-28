@@ -59,6 +59,8 @@ interface Session {
   me: Me;
   project: ProjectSummary;
   can(permission: Permission): boolean;
+  /** Organisation-wide permission (admin console, creating projects), independent of the current project. */
+  canOrg(permission: Permission): boolean;
   selectProject(id: string): void;
 }
 const SessionContext = createContext<Session | null>(null);
@@ -74,7 +76,9 @@ function SessionProvider({ children }: { children: ReactNode }) {
     return <div className="empty" style={{ height: '100%' }}><Icon name="alert" size={22} /><div>{message}</div><button className="btn" onClick={() => me.refetch()}>Try again</button></div>;
   }
   if (!me.data) return <div className="empty t3" style={{ height: '100%' }}>Loading your workspace…</div>;
-  const project = me.data.projects.find((p) => p.id === projectId) ?? me.data.projects[0];
+  // An archived project stays selectable (to read its history) but is never the default.
+  const project =
+    me.data.projects.find((p) => p.id === projectId) ?? me.data.projects.find((p) => !p.archived) ?? me.data.projects[0];
   if (!project) {
     return <div className="empty" style={{ height: '100%' }}><div>You are not on any project yet.</div><div className="t3">Ask a project admin to add you.</div></div>;
   }
@@ -82,6 +86,7 @@ function SessionProvider({ children }: { children: ReactNode }) {
     me: me.data,
     project,
     can: (p) => project.permissions.includes(p),
+    canOrg: (p) => me.data.orgPermissions.includes(p),
     selectProject: (id) => { writePref('tb.project', id); setProjectId(id); },
   };
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

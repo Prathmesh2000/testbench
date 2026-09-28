@@ -39,6 +39,10 @@ export interface ProjectTable {
   next_case_no: Generated<number>;
   next_run_no: Generated<number>;
   created_at: Timestamp;
+  group_name: string | null;
+  description: Generated<string>;
+  archived: Generated<boolean>;
+  created_by: string | null;
 }
 
 export interface ModuleTable {
