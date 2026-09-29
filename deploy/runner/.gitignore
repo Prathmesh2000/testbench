@@ -1,0 +1,2 @@
+# Per-item working directories: generated specs, reports and Playwright output.
+.work/

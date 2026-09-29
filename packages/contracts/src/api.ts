@@ -202,6 +202,8 @@ export const EVIDENCE_TYPES = [
   'video/webm',
   'text/plain',
   'application/json',
+  // Playwright traces from the Test Browser, replayable in its trace viewer.
+  'application/zip',
 ] as const;
 export const EVIDENCE_MAX_BYTES = 100 * 1024 * 1024;
 export const EvidenceUploadBody = z.object({
@@ -535,6 +537,8 @@ export const LogBugBody = z.object({
   summary: z.string().trim().min(5).max(250),
   severity: z.enum(SEVERITIES).default('Major'),
   labels: z.array(label).max(10).default([]),
+  /** Evidence of the run item to attach in Jira. Omitted: all of it; empty: none. */
+  evidenceIds: z.array(z.uuid()).max(50).optional(),
 });
 
 export const LinkBugBody = z.object({
@@ -544,7 +548,64 @@ export const LinkBugBody = z.object({
     .string()
     .trim()
     .regex(/^[A-Z][A-Z0-9]{0,9}-\d+$/i, 'Use a Jira key such as PAY-4938'),
+  evidenceIds: z.array(z.uuid()).max(50).optional(),
 });
+
+// ---------- Jira connections: one per tester ----------
+
+const siteUrl = z
+  .string()
+  .trim()
+  .transform((s) => s.replace(/\/+$/, ''))
+  .pipe(z.url({ message: 'Use your Jira site address, such as https://acme.atlassian.net' }));
+
+export const ConnectJiraBody = z.object({
+  siteUrl,
+  email: z.email(),
+  apiToken: z.string().trim().min(8).max(500),
+});
+
+export interface JiraConnection {
+  siteUrl: string;
+  email: string;
+  /** The name Jira shows on issues and comments this person creates through Testbench. */
+  displayName: string;
+  status: 'active' | 'error';
+  lastError: string | null;
+  connectedAt: string;
+}
+
+/** Who in the organisation has connected Jira (admin view; no secrets). */
+export interface JiraConnectionSummary {
+  user: UserRef;
+  siteUrl: string;
+  status: 'active' | 'error';
+  connectedAt: string;
+}
+
+export const JiraMappingBody = z.object({
+  siteUrl,
+  jiraKey: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z][A-Z0-9_]{0,9}$/, 'Use a Jira project key such as PAY'),
+  issueType: z.string().trim().min(1).max(60).default('Bug'),
+});
+
+export interface JiraMapping {
+  siteUrl: string;
+  jiraKey: string;
+  issueType: string;
+  updatedAt: string;
+}
+
+export interface JiraProjectOption {
+  key: string;
+  name: string;
+}
+
+export type AttachmentStatus = 'pending' | 'uploading' | 'uploaded' | 'failed' | 'linked_only';
 
 export const RetestBody = z
   .object({
@@ -609,6 +670,8 @@ export interface DefectDetail extends DefectRow {
   timeline: DefectEvent[];
   retests: RetestItem[];
   items: { runKey: string; runName: string; build: string; config: string; caseKey: string }[];
+  /** Evidence files sent to Jira with this bug, and whether each one arrived. */
+  attachments: { fileName: string; status: AttachmentStatus; error: string | null }[];
 }
 
 export interface SimilarDefect {

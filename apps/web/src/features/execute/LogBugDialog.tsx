@@ -1,7 +1,8 @@
 'use client';
 
-import { SEVERITIES, type DefectRow, type RunItemDetail, type RunSummary, type Severity, type SimilarDefect } from '@tb/contracts';
+import { SEVERITIES, type DefectRow, type JiraConnection, type RunItemDetail, type RunSummary, type Severity, type SimilarDefect } from '@tb/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Icon } from '@/components/Icon';
 import { useSession, useToast } from '@/components/providers';
@@ -24,6 +25,10 @@ export function LogBugDialog({ item, run, onClose }: { item: RunItemDetail; run:
   const [debounced, setDebounced] = useState(summary);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Every file is attached unless the tester unticks it (a screenshot may show data that shouldn't leave).
+  const [attach, setAttach] = useState<Set<string>>(() => new Set(item.evidence.map((e) => e.id)));
+  const jira = useQuery({ queryKey: ['me-jira'], queryFn: () => get<JiraConnection | null>('/me/jira'), retry: false });
+  const notConnected = jira.isSuccess && (!jira.data || jira.data.status !== 'active');
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(summary.trim()), 350);
@@ -46,7 +51,7 @@ export function LogBugDialog({ item, run, onClose }: { item: RunItemDetail; run:
     setSaving(true);
     setError(null);
     try {
-      const body = { runId: run.id, itemId: item.id };
+      const body = { runId: run.id, itemId: item.id, evidenceIds: [...attach] };
       const defect = duplicate
         ? await api<DefectRow>('POST', `/projects/${project.id}/defects/link`, { ...body, jiraKey: duplicate })
         : await api<DefectRow>('POST', `/projects/${project.id}/defects`, { ...body, summary, severity });
@@ -93,7 +98,23 @@ export function LogBugDialog({ item, run, onClose }: { item: RunItemDetail; run:
               </div>
             )}
             {item.evidence.length > 0 && (
-              <div className="field"><span className="flab">Evidence linked in the report</span><div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>{item.evidence.map((e) => <span key={e.id} className="pill" style={{ height: 24 }}><Icon name="paperclip" size={12} />{e.fileName}</span>)}</div></div>
+              <div className="field">
+                <span className="flab">Attach to the Jira issue <span className="t3" style={{ fontWeight: 400 }}>· untick anything that shouldn&apos;t leave Testbench</span></span>
+                <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                  {item.evidence.map((e) => (
+                    <label key={e.id} className="pill" style={{ height: 24, gap: 6, cursor: 'pointer', opacity: attach.has(e.id) ? 1 : 0.55 }}>
+                      <input
+                        type="checkbox"
+                        className="cb"
+                        checked={attach.has(e.id)}
+                        onChange={() => setAttach((prev) => { const next = new Set(prev); if (next.has(e.id)) next.delete(e.id); else next.add(e.id); return next; })}
+                        aria-label={`Attach ${e.fileName}`}
+                      />
+                      <Icon name="paperclip" size={12} />{e.fileName}
+                    </label>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 
@@ -121,10 +142,12 @@ export function LogBugDialog({ item, run, onClose }: { item: RunItemDetail; run:
         </div>
 
         <div className="row" style={{ height: 54, padding: '0 16px', borderTop: '1px solid var(--border)', gap: 8 }}>
-          {error ? <span className="err">{error}</span> : <span className="t3" style={{ fontSize: 12 }}>The bug is linked to <span className="mono">{item.caseKey}</span> and this run item; the result stays as recorded.</span>}
+          {notConnected ? (
+            <span className="err">Bugs are created as you in Jira. <Link href="/settings#jira" onClick={onClose}>Connect your Jira account</Link> first.</span>
+          ) : error ? <span className="err">{error}</span> : <span className="t3" style={{ fontSize: 12 }}>Created in Jira as {jira.data?.displayName ?? 'you'} and linked to <span className="mono">{item.caseKey}</span>; the result stays as recorded.</span>}
           <div className="f1" />
           <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={submit} disabled={saving || (!duplicate && summary.trim().length < 5)}>
+          <button className="btn primary" onClick={submit} disabled={saving || notConnected || (!duplicate && summary.trim().length < 5)}>
             {saving ? 'Talking to Jira…' : duplicate ? `Link to ${duplicate}` : 'Create in Jira'}
           </button>
         </div>

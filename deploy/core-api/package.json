@@ -25,6 +25,7 @@
     "@tb/platform": "workspace:*",
     "@tb/repository": "workspace:*",
     "@tb/search": "workspace:*",
+    "@tb/studio": "workspace:*",
     "fastify": "^5.12.5",
     "fastify-type-provider-zod": "^7.0.0",
     "kysely": "^0.29.6",
@@ -32,6 +33,7 @@
     "tsx": "^4.23.15"
   },
   "devDependencies": {
+    "@tb/runner": "workspace:*",
     "@types/pg": "^8.15.0",
     "jose": "^6.2.12",
     "vitest": "^5.0.2"

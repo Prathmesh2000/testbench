@@ -62,6 +62,21 @@ export class ObjectStorage {
     });
   }
 
+  /** Server-side write, for files a worker produces itself (automated run traces and screenshots). */
+  async write(key: string, body: Uint8Array, contentType: string): Promise<void> {
+    await this.client.send(new PutObjectCommand({ Bucket: this.cfg.bucket, Key: key, Body: body, ContentType: contentType }));
+  }
+
+  /**
+   * Reads a whole object into memory, for server-side forwarding (evidence attached to Jira). Callers
+   * check the size first: evidence is capped at 100 MB by the upload rules.
+   */
+  async read(key: string): Promise<Uint8Array> {
+    const res = await this.client.send(new GetObjectCommand({ Bucket: this.cfg.bucket, Key: key }));
+    if (!res.Body) throw new Error(`Object ${key} has no body`);
+    return res.Body.transformToByteArray();
+  }
+
   presignDownload(key: string): Promise<string> {
     return getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.cfg.bucket, Key: key }), {
       expiresIn: 3600,

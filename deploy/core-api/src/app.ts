@@ -1,7 +1,7 @@
 import { aiRoutes, type AiService } from '@tb/ai';
 import { analyticsRoutes } from '@tb/analytics';
 import { collabRoutes, type CollabOptions } from '@tb/collab';
-import { defectRoutes, jiraWebhook, type JiraClient } from '@tb/defect';
+import { defectRoutes, type JiraAccounts } from '@tb/defect';
 import { docsRoutes } from '@tb/docs';
 import { executionRoutes } from '@tb/execution';
 import { meetingRoutes } from '@tb/meetings';
@@ -11,6 +11,7 @@ import { auditRoutes } from '@tb/audit';
 import { installErrorHandler, type ServiceDeps, type TokenVerifier } from '@tb/platform';
 import { repositoryRoutes } from '@tb/repository';
 import { searchRoutes, type CaseIndex } from '@tb/search';
+import { studioRoutes, type BrowserConfig } from '@tb/studio';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import { sql } from 'kysely';
@@ -19,7 +20,8 @@ import { integrationRoutes } from './integrations';
 export interface AppOptions extends ServiceDeps {
   verify: TokenVerifier;
   index: CaseIndex;
-  jira: JiraClient | null;
+  /** Per-tester Jira connections. */
+  jira: JiraAccounts;
   notify: NotifyClient | null;
   ai: AiService;
   keycloak: KeycloakAdmin | null;
@@ -27,6 +29,8 @@ export interface AppOptions extends ServiceDeps {
   issuer: string;
   gatewayUrl: string | null;
   collab: CollabOptions;
+  /** Test Browser server and the secret its session tickets are signed with. */
+  browser: BrowserConfig;
   calendarUrl: string | null;
   webUrl: string;
   logLevel?: string;
@@ -34,7 +38,7 @@ export interface AppOptions extends ServiceDeps {
 
 /**
  * Builds the core-api deploy unit (HLD §1.1): IAM, Test Repository, Execution, Search, Defect
- * Integration, Analytics, Docs and AI Assist mounted in one process under /api/v1, plus the Jira webhook. Kept separate from
+ * Integration, Analytics, Docs and AI Assist mounted in one process under /api/v1. Kept separate from
  * server.ts so tests can build it with their own dependencies and call it with inject().
  */
 export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
@@ -71,7 +75,9 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
         db: opts.db,
         cache: opts.cache,
         verify: opts.verify,
-        publicPaths: [],
+        // The locator picker runs on the tester's own site with no session; it carries a signed,
+        // short-lived ticket that the handler verifies instead.
+        publicPaths: ['/api/v1/studio/picker/captured'],
       });
       await api.register(iamRoutes, deps);
       await api.register(adminRoutes, { ...deps, keycloak: opts.keycloak });
@@ -80,18 +86,17 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
       await api.register(repositoryRoutes, deps);
       await api.register(executionRoutes, deps);
       await api.register(searchRoutes, { ...deps, index: opts.index });
-      await api.register(defectRoutes, { ...deps, jira: opts.jira, webUrl: opts.webUrl });
+      await api.register(defectRoutes, { ...deps, accounts: opts.jira, webUrl: opts.webUrl });
       await api.register(analyticsRoutes, deps);
       await api.register(docsRoutes, { ...deps, ai: opts.ai });
       await api.register(aiRoutes, { ...deps, ai: opts.ai });
       await api.register(collabRoutes, { ...deps, collab: opts.collab });
       await api.register(meetingRoutes, { ...deps, calendarUrl: opts.calendarUrl });
+      await api.register(studioRoutes, { ...deps, browser: opts.browser, webUrl: opts.webUrl });
       if (opts.notify) await api.register(notifyRoutes, { ...deps, client: opts.notify });
     },
     { prefix: '/api/v1' },
   );
-
-  if (opts.jira) await app.register(jiraWebhook, { db: opts.db, secret: opts.jira.cfg.webhookSecret });
 
   return app;
 }

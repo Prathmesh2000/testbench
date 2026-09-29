@@ -27,6 +27,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     { href: '/cases', label: 'Test cases', icon: 'cases' },
     { href: '/data', label: 'Test data', icon: 'rows' },
     { href: '/runs', label: 'Runs', icon: 'runs' },
+    { href: '/automation', label: 'Automation', icon: 'play' },
     { href: '/defects', label: 'Defects', icon: 'bug' },
   ] },
   { group: 'Explore', items: [

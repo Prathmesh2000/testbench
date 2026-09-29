@@ -15,11 +15,12 @@ const Config = z.object({
   OPENSEARCH_URL: z.url(),
   /** Public URL of the web app, used for links in Jira issues. */
   WEB_URL: z.url(),
-  // Jira is optional: without it the defect screens explain that Jira is not connected.
-  JIRA_BASE_URL: z.url().optional(),
-  JIRA_EMAIL: z.string().min(1).optional(),
-  JIRA_API_TOKEN: z.string().min(1).optional(),
-  JIRA_WEBHOOK_SECRET: z.string().min(16).optional(),
+  // Each tester connects their own Jira account. The secret encrypts their API tokens at rest (KMS in
+  // AWS); without it nobody can connect and the defect screens say so.
+  JIRA_TOKEN_SECRET: z.string().min(32).optional(),
+  // Sites a tester may connect. The server calls whatever URL is stored, so this is the SSRF guard:
+  // Jira Cloud only by default; local development widens it to the sandbox.
+  JIRA_SITE_PATTERN: z.string().min(1).default('^https://[a-z0-9][a-z0-9-]*\\.atlassian\\.net$'),
   // The notification service (optional, like Jira): without it, notifications are simply not sent.
   NOTIFY_URL: z.url().optional(),
   NOTIFY_SERVICE_KEY: z.string().min(24).optional(),
@@ -50,6 +51,17 @@ const Config = z.object({
     .regex(/^wss?:\/\//)
     .default('ws://localhost:4300'),
   COLLAB_SECRET: z.string().min(32).optional(),
+  // Test Browser: core-api signs session tickets that the browser-live server verifies.
+  BROWSER_URL: z
+    .string()
+    .regex(/^wss?:\/\//)
+    .default('ws://localhost:4400'),
+  BROWSER_SECRET: z.string().min(32).optional(),
+  /** Local development only: lets the Test Browser open apps on localhost and private addresses. */
+  BROWSER_ALLOW_PRIVATE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   /** Calendar invites for meetings; locally the provider sandbox records them. */
   CALENDAR_URL: z.url().optional(),
   /** The agent gateway (MCP + Slack), shown in the admin console when set. */

@@ -7,7 +7,7 @@ import type { Severity, Step } from '@tb/contracts';
 export type AdfNode =
   | { type: 'paragraph'; content: AdfInline[] }
   | { type: 'heading'; attrs: { level: number }; content: AdfInline[] }
-  | { type: 'orderedList'; content: { type: 'listItem'; content: AdfNode[] }[] };
+  | { type: 'orderedList' | 'bulletList'; content: { type: 'listItem'; content: AdfNode[] }[] };
 type AdfInline = { type: 'text'; text: string; marks?: { type: 'strong' | 'code' }[] };
 export interface AdfDoc {
   type: 'doc';
@@ -26,6 +26,19 @@ const para = (...parts: AdfInline[]): AdfNode => ({
 });
 const heading = (t: string): AdfNode => ({ type: 'heading', attrs: { level: 3 }, content: [text(t)] });
 
+const kind = (contentType: string) =>
+  contentType.startsWith('image/')
+    ? 'screenshot'
+    : contentType.startsWith('video/')
+      ? 'recording'
+      : contentType === 'application/pdf'
+        ? 'PDF'
+        : contentType.startsWith('text/')
+          ? 'log'
+          : 'file';
+const size = (bytes: number) =>
+  bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
 export interface BugContext {
   caseKey: string;
   caseTitle: string;
@@ -39,7 +52,10 @@ export interface BugContext {
   /** Index of the failed or blocked step, or -1 when the tester logs a bug without one. */
   failedAt: number;
   actual: string | null;
-  evidence: string[];
+  /** The data-set row this item ran with, already masked; null when the case has no data set. */
+  data: Record<string, string> | null;
+  /** Evidence being attached to the issue. */
+  evidence: { fileName: string; contentType: string; sizeBytes: number }[];
   reporter: string;
   link: string;
 }
@@ -71,9 +87,29 @@ export function bugDescription(ctx: BugContext): AdfDoc {
     content.push(para(text('Expected: ', true), text(failed.expected || '—')));
     content.push(para(text('Actual: ', true), text(ctx.actual || '—')));
   }
-  if (ctx.evidence.length)
-    content.push(para(text('Evidence in Testbench: ', true), text(ctx.evidence.join(', '))));
-  content.push(para(text('Open in Testbench: ', true), text(ctx.link)));
+  if (ctx.data && Object.keys(ctx.data).length)
+    content.push(
+      para(
+        text('Test data: ', true),
+        text(
+          Object.entries(ctx.data)
+            .map(([k, v]) => `${k} = ${v}`)
+            .join(' · '),
+        ),
+      ),
+    );
+  if (ctx.evidence.length) {
+    // The files arrive as attachments shortly after the issue; this list says what each one is, and
+    // still tells the developer what exists if one was too large for the site and stayed a link.
+    content.push(heading('Attachments'), {
+      type: 'bulletList',
+      content: ctx.evidence.map((e) => ({
+        type: 'listItem',
+        content: [para(text(`${e.fileName} (${kind(e.contentType)}, ${size(e.sizeBytes)})`))],
+      })),
+    });
+  }
+  content.push(para(text('Open in Testbench (optional): ', true), text(ctx.link)));
   return { type: 'doc', version: 1, content };
 }
 

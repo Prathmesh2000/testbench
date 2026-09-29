@@ -1,18 +1,22 @@
-import { createHmac } from 'node:crypto';
 import type {
   CaseDetail,
   DefectDetail,
   DefectRow,
+  EvidenceUpload,
+  JiraConnection,
+  JiraMapping,
   RunItemRow,
   RunSummary,
   SavedFilter,
   SearchResult,
 } from '@tb/contracts';
+import { processAttachment } from '@tb/defect';
 import { createPreparedRun, prepChunk } from '@tb/execution';
 import { relayBatch, withTenant } from '@tb/platform';
 import { ALIAS, caseIndexer } from '@tb/search';
+import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { call, startHarness, type Harness } from './harness';
+import { call, JIRA_SANDBOX, startHarness, type Harness, type TestUser } from './harness';
 
 // M2 against the local stack: OpenSearch for search, the Jira sandbox for defects.
 
@@ -192,19 +196,19 @@ describe('defects and Jira', () => {
   let run: RunSummary;
   let item: RunItemRow;
   let defect: DefectRow;
+  let evidenceId: string;
   const base = () => `/projects/${h.projectId}`;
-  const webhook = async (issueKey: string, secret = process.env.JIRA_WEBHOOK_SECRET!) => {
-    const issue = await h.jira.getIssue(issueKey);
-    const payload = JSON.stringify({ webhookEvent: 'jira:issue_updated', issue });
-    return h.app.inject({
-      method: 'POST',
-      url: '/webhooks/jira',
-      payload,
-      headers: {
-        'content-type': 'application/json',
-        'x-hub-signature': `sha256=${createHmac('sha256', secret).update(payload).digest('hex')}`,
-      },
-    });
+  const connect = (user: TestUser, apiToken = JIRA_SANDBOX.apiToken, siteUrl = JIRA_SANDBOX.siteUrl) =>
+    call<JiraConnection>(h, user, 'PUT', '/me/jira', { siteUrl, email: user.email, apiToken });
+  /** Claims and uploads every queued attachment, as the background worker would. */
+  const drainAttachments = async () => {
+    for (;;) {
+      const { rows } = await sql<{ id: string; org_id: string }>`SELECT * FROM defect.claim_attachment()`.execute(
+        h.appDb,
+      );
+      if (!rows[0]) return;
+      await processAttachment(h.appDb, h.storage, h.accounts, rows[0]);
+    }
   };
 
   beforeAll(async () => {
@@ -224,9 +228,64 @@ describe('defects and Jira', () => {
       status: 'failed',
       actual: 'Stayed PENDING after 6 minutes',
     });
+    // A real screenshot upload: presigned URL from the API, bytes straight to S3.
+    const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+    const up = await call<EvidenceUpload>(h, h.users.tester, 'POST', `${base()}/runs/${run.id}/items/${item.id}/evidence`, {
+      stepIndex: 0,
+      fileName: 'pending-status.png',
+      contentType: 'image/png',
+      sizeBytes: png.length,
+    });
+    expect(up.status, JSON.stringify(up.body)).toBe(201);
+    await fetch(up.body.uploadUrl, { method: 'PUT', body: png, headers: { 'content-type': 'image/png' } });
+    evidenceId = up.body.evidence.id;
   });
 
-  it('logs a bug in Jira, prefilled from the failed step', async () => {
+  it('asks the tester to connect their own Jira before logging a bug', async () => {
+    const res = await call(h, h.users.tester, 'POST', `${base()}/defects`, {
+      runId: run.id,
+      itemId: item.id,
+      summary: 'Bug before connecting Jira',
+    });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('jira_not_connected');
+  });
+
+  it('refuses a token Jira rejects and sites outside the allowed list', async () => {
+    expect((await connect(h.users.tester, 'wrong-token')).status).toBe(400);
+    const internal = await connect(h.users.tester, JIRA_SANDBOX.apiToken, 'http://169.254.169.254');
+    expect(internal.status).toBe(400);
+    expect((await call(h, h.users.tester, 'GET', '/me/jira')).body).toBeFalsy();
+  });
+
+  it('connects each tester to Jira as themselves', async () => {
+    const res = await connect(h.users.tester);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body).toMatchObject({ siteUrl: JIRA_SANDBOX.siteUrl, email: h.users.tester.email, status: 'active' });
+    expect(JSON.stringify(res.body)).not.toContain(JIRA_SANDBOX.apiToken);
+    const admins = await call(h, h.users.admin, 'GET', '/admin/jira/connections');
+    expect(admins.body.map((c: { user: { id: string } }) => c.user.id)).toContain(h.users.tester.id);
+    expect((await call(h, h.users.tester, 'GET', '/admin/jira/connections')).status).toBe(403);
+  });
+
+  it('maps the project to a Jira project that really exists', async () => {
+    expect((await connect(h.users.admin)).status).toBe(200);
+    const bad = await call(h, h.users.admin, 'PUT', `${base()}/jira/mapping`, {
+      siteUrl: JIRA_SANDBOX.siteUrl,
+      jiraKey: 'NOPE',
+    });
+    expect(bad.status).toBe(400);
+    const res = await call<JiraMapping>(h, h.users.admin, 'PUT', `${base()}/jira/mapping`, {
+      siteUrl: JIRA_SANDBOX.siteUrl,
+      jiraKey: 'ci',
+      issueType: 'bug',
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body).toMatchObject({ jiraKey: 'CI', issueType: 'Bug' });
+    expect((await call(h, h.users.tester, 'PUT', `${base()}/jira/mapping`, { siteUrl: JIRA_SANDBOX.siteUrl, jiraKey: 'CI' })).status).toBe(403);
+  });
+
+  it('logs a bug in Jira as the tester, prefilled from the failed step', async () => {
     const res = await call<DefectRow>(h, h.users.tester, 'POST', `${base()}/defects`, {
       runId: run.id,
       itemId: item.id,
@@ -239,10 +298,40 @@ describe('defects and Jira', () => {
       severity: 'Critical',
       statusCategory: 'new',
       linkedCases: [{ key: item.caseKey }],
+      jiraUrl: `${JIRA_SANDBOX.siteUrl}/browse/${defect.jiraKey}`,
     });
     expect(defect.jiraKey).toMatch(/^CI-\d+$/);
-    const issue = await h.jira.getIssue(defect.jiraKey);
+    const issue = (await h.jira.getIssue(defect.jiraKey)) as unknown as {
+      fields: { reporter: { displayName: string }; description: unknown };
+    };
+    const me = (await call<JiraConnection>(h, h.users.tester, 'GET', '/me/jira')).body;
+    expect(issue.fields.reporter.displayName).toBe(me.displayName);
     expect(JSON.stringify(issue)).toContain('Stayed PENDING after 6 minutes');
+    expect(JSON.stringify(issue.fields.description)).toContain('pending-status.png (screenshot');
+  });
+
+  it('attaches the evidence to the Jira issue', async () => {
+    const before = await call<DefectDetail>(h, h.users.tester, 'GET', `${base()}/defects/${defect.id}`);
+    // Queued, not yet in Jira. A worker running elsewhere may already have claimed it, so either
+    // state means the same thing here.
+    expect(before.body.attachments).toHaveLength(1);
+    expect(before.body.attachments[0]).toMatchObject({ fileName: 'pending-status.png', error: null });
+    expect(['pending', 'uploading', 'uploaded']).toContain(before.body.attachments[0]!.status);
+    await drainAttachments();
+    const after = await call<DefectDetail>(h, h.users.tester, 'GET', `${base()}/defects/${defect.id}`);
+    expect(after.body.attachments[0]).toMatchObject({ status: 'uploaded' });
+    const issue = (await h.jira.getIssue(defect.jiraKey)) as unknown as {
+      fields: { attachment?: { filename: string }[] };
+    };
+    // The sandbox returns every field, so the stored attachment is visible here.
+    expect(issue.fields.attachment?.map((a) => a.filename)).toEqual(['pending-status.png']);
+    expect(evidenceId).toBeTruthy();
+  });
+
+  it('lets anyone view defects without a Jira connection of their own', async () => {
+    const res = await call<DefectRow[]>(h, h.users.viewer, 'GET', `${base()}/defects`);
+    expect(res.status).toBe(200);
+    expect(res.body.find((d) => d.id === defect.id)?.jiraUrl).toContain('/browse/');
   });
 
   it('finds the new bug as a likely duplicate of a reworded summary', async () => {
@@ -257,22 +346,20 @@ describe('defects and Jira', () => {
     expect(res.body[0].similarity).toBeGreaterThan(30);
   });
 
-  it('rejects webhooks with a bad signature', async () => {
-    const res = await webhook(defect.jiraKey, 'not-the-secret-at-all');
-    expect(res.statusCode).toBe(401);
-  });
-
-  it('syncs "Done" from a signed webhook and queues a retest', async () => {
+  it('syncs "Done" through the reporter’s connection and queues one retest', async () => {
     await h.jira.transitionTo(defect.jiraKey, 'Done');
-    const res = await webhook(defect.jiraKey);
-    expect(res.statusCode).toBe(200);
+    // The lead has no Jira connection: the sync still works, borrowing the reporter's.
+    const res = await call<{ changed: number }>(h, h.users.lead, 'POST', `${base()}/defects/sync`);
+    expect(res.body.changed).toBeGreaterThanOrEqual(1);
     const queue = await call<DefectRow[]>(h, h.users.tester, 'GET', `${base()}/defects?view=retest`);
     expect(queue.body.find((d) => d.id === defect.id)).toMatchObject({ status: 'Done', retest: 'pending' });
-    // A repeated webhook must not queue a second retest.
-    await webhook(defect.jiraKey);
+    // A repeated pass must not queue a second retest.
+    await call(h, h.users.lead, 'POST', `${base()}/defects/sync`);
     const detail = await call<DefectDetail>(h, h.users.tester, 'GET', `${base()}/defects/${defect.id}`);
     expect(detail.body.retests.filter((r) => r.status === 'pending')).toHaveLength(1);
     expect(detail.body.timeline.map((e) => e.kind)).toEqual(['created', 'status', 'retest']);
+    const sync = await call(h, h.users.lead, 'GET', `${base()}/defects/sync`);
+    expect(sync.body).toMatchObject({ connected: true, lastError: null });
   });
 
   it('reopens the Jira issue when the retest fails, with the tester’s note', async () => {
@@ -289,24 +376,6 @@ describe('defects and Jira', () => {
     expect(JSON.stringify(issue)).toContain('Still PENDING on Safari');
   });
 
-  it('repairs a missed webhook with the reconciler', async () => {
-    await h.jira.transitionTo(defect.jiraKey, 'In Progress');
-    // The sandbox also sends a real webhook to a locally running core-api. Let it land, then roll our
-    // copy back to simulate that webhook having been lost, so the reconciler has something to repair.
-    await new Promise((r) => setTimeout(r, 500));
-    await h.owner
-      .updateTable('defect.defect')
-      .set({ status: 'To Do', status_category: 'new' })
-      .where('id', '=', defect.id)
-      .execute();
-    const res = await call<{ changed: number }>(h, h.users.tester, 'POST', `${base()}/defects/sync`);
-    expect(res.body.changed).toBeGreaterThanOrEqual(1);
-    const row = (await call<DefectRow[]>(h, h.users.tester, 'GET', `${base()}/defects`)).body.find(
-      (d) => d.id === defect.id,
-    )!;
-    expect(row.status).toBe('In Progress');
-  });
-
   it('links an existing bug and records the repeat sighting in Jira', async () => {
     const res = await call<DefectRow>(h, h.users.tester, 'POST', `${base()}/defects/link`, {
       runId: run.id,
@@ -319,6 +388,16 @@ describe('defects and Jira', () => {
       fields: { comment?: { comments: unknown[] } };
     };
     expect(comments.fields.comment?.comments.length ?? 0).toBeLessThanOrEqual(2);
+  });
+
+  it('says why sync is paused once the reporter disconnects and nobody else can reach Jira', async () => {
+    await call(h, h.users.tester, 'DELETE', '/me/jira');
+    await call(h, h.users.admin, 'DELETE', '/me/jira');
+    await call(h, h.users.lead, 'POST', `${base()}/defects/sync`);
+    const sync = await call(h, h.users.lead, 'GET', `${base()}/defects/sync`);
+    expect(sync.body.connected).toBe(false);
+    expect(sync.body.lastError).toMatch(/nobody with access/);
+    await connect(h.users.tester);
   });
 
   it('refuses defect actions for a viewer', async () => {

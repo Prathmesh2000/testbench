@@ -84,17 +84,15 @@ services:
       retries: 60
 
   # Stand-in for Jira Cloud (HLD §10): the subset of the REST API Testbench uses, plus a page at
-  # http://localhost:8090 to move bugs between statuses, which sends Jira-style webhooks to core-api.
+  # http://localhost:8090 to move bugs between statuses. Testers connect to it with any email and the
+  # sandbox token; core-api picks up status changes on its next sync.
   jira:
     image: node:24-alpine
     command: ["node", "/app/server.mjs"]
     environment:
       JIRA_SANDBOX_TOKEN: jira-sandbox-token
-      JIRA_WEBHOOK_URL: http://host.docker.internal:4000/webhooks/jira
-      JIRA_WEBHOOK_SECRET: jira-sandbox-webhook-secret
       JIRA_DATA: /data/issues.json
     ports: ["8090:8090"]
-    extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
       - ./jira-sandbox:/app:ro
       - jiradata:/data

@@ -27,6 +27,13 @@ Built so far:
 - **M5 (part 2)**: live boards (documents on TipTap, sheets, Excalidraw whiteboards) synced with Yjs through a
   Hocuspocus collaboration server, and meetings with calendar invites, live notes and action items that become
   test cases.
+- **Per-tester Jira**: each person connects their own Jira Cloud account (Settings → Jira), so bugs, comments and
+  transitions carry their name in Jira. API tokens are encrypted at rest (AES-256-GCM); a project maps to the Jira
+  site and key its bugs are filed into, and a defect stays on the site it was filed on.
+- **Testing Studio**: a testing workspace where a manual tester turns a test into automation without writing code —
+  a live browser session with an element picker, steps built by action or plain English, generated Playwright code
+  in an in-app editor, headless runs with evidence, and a shared page/element library. Plan:
+  [docs/testing-studio-plan.md](docs/testing-studio-plan.md).
 
 ## Run it locally
 
@@ -39,7 +46,8 @@ pnpm infra:up             # Postgres, Valkey, Keycloak, S3, OpenSearch, Jira san
 pnpm db:migrate
 pnpm seed --size dev      # PAY with 1,00,000 cases, plus KYC and MOB; --size demo gives PAY 1,000
 pnpm search:reindex       # builds the search index from Postgres (after every seed)
-pnpm dev                  # web :3000, core-api :4000, notification service :4100, agent gateway :4200, collaboration :4300
+pnpm dev                  # web :3000, core-api :4000, notification service :4100, agent gateway :4200,
+                          # collaboration :4300, browser bridge :4400, automation runner
 ```
 
 ```mermaid
@@ -59,9 +67,10 @@ flowchart LR
   B -->|presigned PUT/GET| S[(S3 :9000)]
 ```
 
-The **Jira sandbox** at http://localhost:8090 stands in for Jira Cloud. Changing a bug's status there sends a signed
-webhook to core-api, which is how you "fix" a bug locally and watch it reach the retest queue. To use a real Jira
-Cloud site, set `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` and `JIRA_WEBHOOK_SECRET` in `.env`.
+The **Jira sandbox** at http://localhost:8090 stands in for Jira Cloud. Each tester connects their own Jira account in
+**Settings → Jira**; locally use site `http://localhost:8090`, your email and token `jira-sandbox-token`. Changing a
+bug's status on the sandbox page is how you "fix" a bug locally; **Defects → Sync now** (or the background sync) brings
+it into the retest queue. Real Jira Cloud sites work the same way with each person's Atlassian API token.
 
 Notifications land in **Mailpit** (email, http://localhost:8025), the **provider sandbox** (Slack, Teams, Discord and
 SMS, http://localhost:8091) and the bell. Admins manage rules, templates and channels in the Notification console;
@@ -135,6 +144,9 @@ The integration tests create their own organisations and users and delete them a
 | `services/notification`, `deploy/notification-local` | The standalone notification service (its own DynamoDB and SQS) and its local process |
 | `deploy/collab-server` | Hocuspocus server for live boards; opens a board only with a ticket core-api signed |
 | `deploy/agent-gateway` | MCP server and Slack bot; holds no data or permissions of its own |
+| `services/studio` | Testing Studio: live sessions, the element picker, tests, generated code and headless runs |
+| `deploy/browser-live` | Browser bridge: drives the Playwright browser a tester sees and picks elements in |
+| `deploy/runner` | Worker that executes automation runs and stores their evidence |
 | `services/notify-client` | core-api's side: turns events into notifications, and the inbox, preferences and console routes |
 | `packages/tql` | The TQL query language: parser, autocomplete and highlighting, shared by API and web |
 | `packages/contracts` | Request schemas (Zod) and response types shared by API and web |
@@ -150,3 +162,7 @@ The integration tests create their own organisations and users and delete them a
 - Runs up to 5,000 cases are created in the request; larger ones are prepared in the background (up to 10 lakh cases).
 - Events reach consumers (such as the search indexer) through the transactional outbox and an in-process relay;
   EventBridge takes over the delivery when the platform moves to AWS.
+
+## Licence
+
+[MIT](LICENSE).

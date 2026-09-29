@@ -254,9 +254,51 @@ export interface DefectTable {
   fix_version: string | null;
   jira_updated_at: NullableTimestamp;
   issue_type: Generated<string>;
+  site_url: string | null;
   synced_at: Timestamp;
   created_by: string;
   created_at: Timestamp;
+}
+
+export interface JiraConnectionTable {
+  id: Generated<string>;
+  org_id: string;
+  user_id: string;
+  auth_type: Generated<string>;
+  site_url: string;
+  email: string;
+  account_id: string;
+  display_name: string;
+  secret_enc: string;
+  status: Generated<string>;
+  last_error: string | null;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface JiraProjectMapTable {
+  project_id: string;
+  org_id: string;
+  site_url: string;
+  jira_key: string;
+  issue_type: Generated<string>;
+  updated_by: string;
+  updated_at: Timestamp;
+}
+
+export interface DefectAttachmentTable {
+  id: Generated<string>;
+  org_id: string;
+  defect_id: string;
+  evidence_id: string;
+  uploader_id: string;
+  status: Generated<string>;
+  attempts: Generated<number>;
+  next_attempt_at: Timestamp;
+  jira_attachment_id: string | null;
+  last_error: string | null;
+  created_at: Timestamp;
+  updated_at: Timestamp;
 }
 
 export interface DefectItemLinkTable {
@@ -531,6 +573,138 @@ export interface CaseLinkTable {
   linked_at: Timestamp;
 }
 
+export interface LiveSessionTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  user_id: string;
+  url: string;
+  device: string;
+  run_item_id: string | null;
+  started_at: Timestamp;
+  ended_at: NullableTimestamp;
+  expires_at: Timestamp;
+}
+
+export interface StudioTestTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  key_no: number;
+  title: string;
+  kind: Generated<string>;
+  status: Generated<string>;
+  case_id: string | null;
+  data_set_id: string | null;
+  current_version: Generated<number>;
+  owner_id: string;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface StudioTestVersionTable {
+  test_id: string;
+  version: number;
+  org_id: string;
+  steps: Json<unknown[]>;
+  secrets: string[];
+  warnings: Json<unknown[]>;
+  created_by: string;
+  created_at: Timestamp;
+}
+
+export interface PageElementTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  page: string;
+  name: string;
+  locators: Json<unknown[]>;
+  updated_by: string;
+  updated_at: Timestamp;
+}
+
+export interface StudioComponentTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  name: string;
+  description: Generated<string>;
+  inputs: string[];
+  current_version: Generated<number>;
+  updated_at: Timestamp;
+}
+
+export interface StudioComponentVersionTable {
+  component_id: string;
+  version: number;
+  org_id: string;
+  steps: Json<unknown[]>;
+  inputs: string[];
+  changelog: Generated<string>;
+  created_by: string;
+  created_at: Timestamp;
+}
+
+export interface AutoRunTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  key_no: number;
+  name: string;
+  base_url: string;
+  variables: Json<Record<string, string>>;
+  max_parallel: Generated<number>;
+  trigger: Generated<string>;
+  status: Generated<string>;
+  created_by: string;
+  created_at: Timestamp;
+  finished_at: NullableTimestamp;
+  workspace: Json<Record<string, string> | null> | null;
+}
+
+export interface AutoRunItemTable {
+  id: Generated<string>;
+  org_id: string;
+  run_id: string;
+  test_id: string | null;
+  test_version: number | null;
+  spec_path: string | null;
+  data_row: number | null;
+  data: Json<Record<string, string>>;
+  code: string;
+  status: Generated<string>;
+  attempt: Generated<number>;
+  flaky: Generated<boolean>;
+  error: string | null;
+  steps: Json<unknown[]>;
+  evidence: Json<unknown[]>;
+  duration_ms: number | null;
+  started_at: NullableTimestamp;
+  finished_at: NullableTimestamp;
+  updated_at: Timestamp;
+}
+
+export interface CodeFileTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  path: string;
+  content: string;
+  version: Generated<number>;
+  updated_by: string;
+  updated_at: Timestamp;
+}
+
+export interface CodeFileVersionTable {
+  file_id: string;
+  version: number;
+  org_id: string;
+  content: string;
+  created_by: string;
+  created_at: Timestamp;
+}
+
 export interface Database {
   'iam.org': OrgTable;
   'iam.app_user': AppUserTable;
@@ -574,4 +748,17 @@ export interface Database {
   'repo.data_set': DataSetTable;
   'repo.data_file': DataFileTable;
   'defect.case_link': CaseLinkTable;
+  'defect.jira_connection': JiraConnectionTable;
+  'defect.jira_project_map': JiraProjectMapTable;
+  'defect.attachment': DefectAttachmentTable;
+  'studio.live_session': LiveSessionTable;
+  'studio.test': StudioTestTable;
+  'studio.test_version': StudioTestVersionTable;
+  'studio.page_element': PageElementTable;
+  'studio.component': StudioComponentTable;
+  'studio.component_version': StudioComponentVersionTable;
+  'studio.auto_run': AutoRunTable;
+  'studio.auto_run_item': AutoRunItemTable;
+  'studio.code_file': CodeFileTable;
+  'studio.code_file_version': CodeFileVersionTable;
 }

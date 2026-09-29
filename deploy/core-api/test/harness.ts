@@ -15,7 +15,7 @@ import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from 'jose';
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import pg from 'pg';
 import { AiService } from '@tb/ai';
-import { JiraClient } from '@tb/defect';
+import { JiraAccounts, JiraClient } from '@tb/defect';
 import { CaseIndex, ensurePercolator } from '@tb/search';
 import { buildApp } from '../src/app';
 
@@ -33,10 +33,16 @@ export interface TestUser {
   token: string;
 }
 
+/** The local Jira sandbox (infra/local/jira-sandbox): any email works with this token. */
+export const JIRA_SANDBOX = { siteUrl: 'http://localhost:8090', apiToken: 'jira-sandbox-token' };
+
 export interface Harness {
   app: FastifyInstance;
   index: CaseIndex;
+  /** Direct sandbox access for assertions, outside any tester's connection. */
   jira: JiraClient;
+  accounts: JiraAccounts;
+  storage: ObjectStorage;
   owner: Kysely<Database>;
   appDb: Db;
   orgId: string;
@@ -158,11 +164,10 @@ export async function startHarness(): Promise<Harness> {
   await index.ensure();
   // As in server.ts: otherwise a filter subscription would auto-create this index with the wrong mapping.
   await ensurePercolator(index);
-  const jira = new JiraClient({
-    baseUrl: cfg.JIRA_BASE_URL!,
-    email: cfg.JIRA_EMAIL!,
-    apiToken: cfg.JIRA_API_TOKEN!,
-    webhookSecret: cfg.JIRA_WEBHOOK_SECRET!,
+  const jira = new JiraClient({ baseUrl: JIRA_SANDBOX.siteUrl, email: 'qa-bot@paytrail.in', apiToken: JIRA_SANDBOX.apiToken });
+  const accounts = new JiraAccounts({
+    tokenSecret: 'test-jira-token-secret-at-least-32-characters',
+    sitePattern: /^http:\/\/localhost:8090$/,
   });
   const app = await buildApp({
     db: appDb,
@@ -170,7 +175,7 @@ export async function startHarness(): Promise<Harness> {
     storage,
     verify,
     index,
-    jira,
+    jira: accounts,
     notify: null,
     // Always mock in tests: CI must not depend on a model's speed or randomness (HLD §10.3).
     ai: new AiService(appDb, {
@@ -185,6 +190,7 @@ export async function startHarness(): Promise<Harness> {
     issuer: ISSUER,
     gatewayUrl: null,
     collab: { url: 'ws://localhost:4300', secret: 'test-collab-secret-at-least-32-characters' },
+    browser: { url: 'ws://localhost:4400', secret: 'test-browser-secret-at-least-32-characters', allowPrivate: false },
     calendarUrl: null,
     webUrl: cfg.WEB_URL,
     logLevel: 'silent',
@@ -194,6 +200,8 @@ export async function startHarness(): Promise<Harness> {
     app,
     index,
     jira,
+    accounts,
+    storage,
     owner,
     appDb,
     orgId,
@@ -208,6 +216,16 @@ export async function startHarness(): Promise<Harness> {
       await owner.transaction().execute(async (trx) => {
         await sql`SET LOCAL session_replication_role = replica`.execute(trx);
         for (const table of [
+          'studio.code_file_version',
+          'studio.code_file',
+          'studio.auto_run_item',
+          'studio.auto_run',
+          'studio.test_version',
+          'studio.test',
+          'studio.component_version',
+          'studio.component',
+          'studio.page_element',
+          'studio.live_session',
           'meet.action_item',
           'meet.meeting',
           'collab.board_state',
@@ -226,6 +244,9 @@ export async function startHarness(): Promise<Harness> {
           'outbox.event',
           'search.filter_subscription',
           'search.saved_filter',
+          'defect.attachment',
+          'defect.jira_project_map',
+          'defect.jira_connection',
           'defect.event',
           'defect.retest',
           'defect.item_link',

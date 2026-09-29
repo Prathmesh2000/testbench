@@ -10,8 +10,10 @@ import {
   type SimilarDefect,
   type SyncStatus,
 } from '@tb/contracts';
-import { AppError, badRequest, notFound, recordEvent, withTenant, type Db, type Tx } from '@tb/platform';
+import { AppError, badRequest, maskRecord, notFound, recordEvent, withTenant, type Db, type Tx } from '@tb/platform';
 import { sql } from 'kysely';
+import { projectTarget, type JiraAccounts } from './accounts';
+import { queueAttachments } from './attachments';
 import { bugDescription, commentDoc, JIRA_PRIORITY, type BugContext } from './bug-report';
 import { JiraError, jqlString, type JiraClient, type JiraIssue } from './jira';
 import { searchTerms, similarity } from './similarity';
@@ -35,16 +37,14 @@ async function jiraCall<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-async function projectKey(trx: Tx, projectId: string): Promise<string> {
-  // The Jira project is assumed to share the Testbench project key (PAY → PAY) until per-project
-  // Jira mapping arrives with the admin console (M5).
-  const p = await trx
-    .selectFrom('repo.project')
-    .select('key')
-    .where('id', '=', projectId)
-    .executeTakeFirstOrThrow();
-  return p.key;
-}
+/** Link to an issue on the site it lives on; empty when no site is known (legacy rows). */
+const browse = (site: string | null, key: string) => (site ? `${site}/browse/${key}` : '');
+
+/**
+ * The site a defect lives on: where it was filed, else the project's mapped site, else the reporter's
+ * connection (defects filed before per-tester connections have no site of their own).
+ */
+const siteOf = sql<string | null>`coalesce(d.site_url, m.site_url, jc.site_url)`;
 
 // ---------- reads ----------
 
@@ -52,6 +52,8 @@ function defectRows(trx: Tx, projectId: string) {
   return trx
     .selectFrom('defect.defect as d')
     .innerJoin('iam.app_user as u', 'u.id', 'd.created_by')
+    .leftJoin('defect.jira_project_map as m', 'm.project_id', 'd.project_id')
+    .leftJoin('defect.jira_connection as jc', 'jc.user_id', 'd.created_by')
     .select([
       'd.id',
       'd.jira_key',
@@ -67,6 +69,7 @@ function defectRows(trx: Tx, projectId: string) {
       'u.id as reporter_id',
       'u.name as reporter_name',
       'u.email as reporter_email',
+      siteOf.as('site'),
     ])
     .select((eb) => [
       // Newest retest state wins; any pending retest makes the whole defect "pending".
@@ -84,7 +87,7 @@ function defectRows(trx: Tx, projectId: string) {
 }
 type DefectRecord = Awaited<ReturnType<ReturnType<typeof defectRows>['executeTakeFirstOrThrow']>>;
 
-async function withCases(trx: Tx, jira: JiraClient, rows: DefectRecord[]): Promise<DefectRow[]> {
+async function withCases(trx: Tx, rows: DefectRecord[]): Promise<DefectRow[]> {
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
   // Cases a defect touches: through failed run items, and linked to the case directly.
@@ -106,7 +109,7 @@ async function withCases(trx: Tx, jira: JiraClient, rows: DefectRecord[]): Promi
   return rows.map((r) => ({
     id: r.id,
     jiraKey: r.jira_key,
-    jiraUrl: jira.browseUrl(r.jira_key),
+    jiraUrl: browse(r.site, r.jira_key),
     issueType: r.issue_type,
     summary: r.summary,
     status: r.status,
@@ -126,7 +129,6 @@ async function withCases(trx: Tx, jira: JiraClient, rows: DefectRecord[]): Promi
 
 export async function listDefects(
   trx: Tx,
-  jira: JiraClient,
   caller: Caller,
   projectId: string,
   q: {
@@ -173,19 +175,14 @@ export async function listDefects(
         ),
       ]),
     );
-  return withCases(trx, jira, await query.execute());
+  return withCases(trx, await query.execute());
 }
 
-export async function getDefect(
-  trx: Tx,
-  jira: JiraClient,
-  projectId: string,
-  defectId: string,
-): Promise<DefectDetail> {
+export async function getDefect(trx: Tx, projectId: string, defectId: string): Promise<DefectDetail> {
   const row = await defectRows(trx, projectId).where('d.id', '=', defectId).executeTakeFirst();
   if (!row) throw notFound('Defect');
-  const [base] = await withCases(trx, jira, [row]);
-  const [events, retests, items] = await Promise.all([
+  const [base] = await withCases(trx, [row]);
+  const [events, retests, items, attachments] = await Promise.all([
     trx
       .selectFrom('defect.event as e')
       .leftJoin('iam.app_user as u', 'u.id', 'e.actor')
@@ -228,6 +225,13 @@ export async function getDefect(
       .where('l.defect_id', '=', defectId)
       .orderBy('l.linked_at')
       .execute(),
+    trx
+      .selectFrom('defect.attachment as a')
+      .innerJoin('exec.evidence as e', 'e.id', 'a.evidence_id')
+      .select(['e.file_name', 'a.status', 'a.last_error'])
+      .where('a.defect_id', '=', defectId)
+      .orderBy('a.created_at')
+      .execute(),
   ]);
   return {
     ...base!,
@@ -256,6 +260,12 @@ export async function getDefect(
       config: i.config,
       caseKey: caseKey(i.key_no),
     })),
+    attachments: attachments.map((a) => ({
+      fileName: a.file_name,
+      status: a.status as DefectDetail['attachments'][number]['status'],
+      // An upload still being retried isn't an error yet; the reason shows once it has settled.
+      error: a.status === 'pending' || a.status === 'uploaded' ? null : a.last_error,
+    })),
   };
 }
 
@@ -266,14 +276,15 @@ export async function getDefect(
  */
 export async function similarDefects(
   trx: Tx,
-  jira: JiraClient,
+  jira: JiraClient | null,
   projectId: string,
   summary: string,
 ): Promise<SimilarDefect[]> {
-  const key = await projectKey(trx, projectId);
+  const key = (await projectTarget(trx, projectId)).jiraKey;
   const terms = searchTerms(summary);
+  // Without the caller's own Jira connection, only defects already known here are compared.
   const [remote, local] = await Promise.all([
-    terms.length
+    terms.length && jira
       ? jira
           .search(
             `project = ${jqlString(key)} AND statusCategory != Done AND text ~ ${jqlString(terms.join(' '))}`,
@@ -327,13 +338,22 @@ export async function similarDefects(
 }
 
 export async function syncStatus(trx: Tx, projectId: string): Promise<SyncStatus> {
-  const s = await trx
-    .selectFrom('defect.sync_state')
-    .select(['last_run_at', 'last_error'])
-    .where('project_id', '=', projectId)
-    .executeTakeFirst();
+  const [s, anyone] = await Promise.all([
+    trx
+      .selectFrom('defect.sync_state')
+      .select(['last_run_at', 'last_error'])
+      .where('project_id', '=', projectId)
+      .executeTakeFirst(),
+    trx
+      .selectFrom('defect.jira_connection')
+      .select('id')
+      .where('status', '=', 'active')
+      .limit(1)
+      .executeTakeFirst(),
+  ]);
   return {
-    connected: true,
+    // Somebody in the organisation can reach Jira, so defects can be logged and kept in sync.
+    connected: !!anyone,
     lastSyncAt: s?.last_run_at.toISOString() ?? null,
     lastError: s?.last_error ?? null,
   };
@@ -349,7 +369,8 @@ async function itemContext(
   itemId: string,
   caller: Caller,
   webUrl: string,
-): Promise<BugContext & { caseId: string }> {
+  evidenceIds?: string[],
+): Promise<BugContext & { caseId: string; evidenceIds: string[] }> {
   const item = await trx
     .selectFrom('exec.run_item as i')
     .innerJoin('exec.run as r', 'r.id', 'i.run_id')
@@ -367,6 +388,7 @@ async function itemContext(
       'i.case_id',
       'i.config',
       'i.step_status',
+      'i.data',
       'r.key_no as run_key',
       'r.name as run_name',
       'r.environment',
@@ -397,11 +419,13 @@ async function itemContext(
           .executeTakeFirst(),
     trx
       .selectFrom('exec.evidence')
-      .select('file_name')
+      .select(['id', 'file_name', 'content_type', 'size_bytes'])
       .where('run_item_id', '=', itemId)
       .orderBy('created_at')
       .execute(),
   ]);
+  // Omitted means everything; ids from another item are ignored rather than trusted.
+  const chosen = evidenceIds ? evidence.filter((e) => evidenceIds.includes(e.id)) : evidence;
   return {
     caseId: item.case_id,
     caseKey: caseKey(item.key_no),
@@ -415,7 +439,9 @@ async function itemContext(
     steps: item.steps,
     failedAt,
     actual: actual?.actual ?? null,
-    evidence: evidence.map((e) => e.file_name),
+    data: item.data ? maskRecord(item.data) : null,
+    evidence: chosen.map((e) => ({ fileName: e.file_name, contentType: e.content_type, sizeBytes: e.size_bytes })),
+    evidenceIds: chosen.map((e) => e.id),
     reporter: caller.name,
     link: `${webUrl}/runs/${runId}?item=${itemId}`,
   };
@@ -446,13 +472,21 @@ export async function logBug(
   caller: Caller,
   projectId: string,
   webUrl: string,
-  body: { runId: string; itemId: string; summary: string; severity: Severity; labels: string[] },
+  body: {
+    runId: string;
+    itemId: string;
+    summary: string;
+    severity: Severity;
+    labels: string[];
+    evidenceIds?: string[];
+  },
 ): Promise<DefectRow> {
-  const ctx = await itemContext(trx, projectId, body.runId, body.itemId, caller, webUrl);
-  const jiraProject = await projectKey(trx, projectId);
+  const ctx = await itemContext(trx, projectId, body.runId, body.itemId, caller, webUrl, body.evidenceIds);
+  const target = await projectTarget(trx, projectId);
   const created = await jiraCall(() =>
     jira.createIssue({
-      projectKey: jiraProject,
+      projectKey: target.jiraKey,
+      issueType: target.issueType,
       summary: body.summary,
       description: bugDescription(ctx),
       priority: JIRA_PRIORITY[body.severity],
@@ -475,10 +509,13 @@ export async function logBug(
       assignee_name: issue.fields.assignee?.displayName ?? null,
       fix_version: issue.fields.fixVersions?.[0]?.name ?? null,
       jira_updated_at: issue.fields.updated,
+      issue_type: issue.fields.issuetype?.name ?? target.issueType,
+      site_url: jira.cfg.baseUrl,
       created_by: caller.userId,
     })
     .returning('id')
     .executeTakeFirstOrThrow();
+  await queueAttachments(trx, caller.orgId, id, caller.userId, ctx.evidenceIds);
   await trx
     .insertInto('defect.item_link')
     .values({
@@ -505,7 +542,7 @@ export async function logBug(
     data: { defect_id: id, jira_key: issue.key, case_id: ctx.caseId },
   });
   return (
-    await withCases(trx, jira, [
+    await withCases(trx, [
       await defectRows(trx, projectId).where('d.id', '=', id).executeTakeFirstOrThrow(),
     ])
   )[0]!;
@@ -521,11 +558,11 @@ export async function linkBug(
   caller: Caller,
   projectId: string,
   webUrl: string,
-  body: { runId: string; itemId: string; jiraKey: string },
+  body: { runId: string; itemId: string; jiraKey: string; evidenceIds?: string[] },
 ): Promise<DefectRow> {
-  const ctx = await itemContext(trx, projectId, body.runId, body.itemId, caller, webUrl);
+  const ctx = await itemContext(trx, projectId, body.runId, body.itemId, caller, webUrl, body.evidenceIds);
   const issue = await jiraCall(() => jira.getIssue(body.jiraKey.toUpperCase()));
-  if (!issue.key.startsWith(`${await projectKey(trx, projectId)}-`))
+  if (!issue.key.startsWith(`${(await projectTarget(trx, projectId)).jiraKey}-`))
     throw badRequest(`${issue.key} belongs to another Jira project.`);
 
   const { id } = await trx
@@ -541,6 +578,7 @@ export async function linkBug(
       assignee_name: issue.fields.assignee?.displayName ?? null,
       fix_version: issue.fields.fixVersions?.[0]?.name ?? null,
       jira_updated_at: issue.fields.updated,
+      site_url: jira.cfg.baseUrl,
       created_by: caller.userId,
     })
     .onConflict((oc) =>
@@ -563,6 +601,7 @@ export async function linkBug(
     .returning('defect_id')
     .executeTakeFirst();
   if (linked) {
+    await queueAttachments(trx, caller.orgId, id, caller.userId, ctx.evidenceIds);
     await addEvent(
       trx,
       caller.orgId,
@@ -588,7 +627,7 @@ export async function linkBug(
     });
   }
   return (
-    await withCases(trx, jira, [
+    await withCases(trx, [
       await defectRows(trx, projectId).where('d.id', '=', id).executeTakeFirstOrThrow(),
     ])
   )[0]!;
@@ -671,27 +710,15 @@ export async function applyIssue(
   return true;
 }
 
-/** Webhook entry point: finds which tenant(s) track this Jira key and applies the update in each. */
-export async function handleWebhookIssue(db: Db, issue: JiraIssue): Promise<number> {
-  const { rows } = await sql<{
-    org_id: string;
-    project_id: string;
-  }>`SELECT * FROM defect.locate_jira_key(${issue.key})`.execute(db);
-  for (const r of rows)
-    await withTenant(db, { orgId: r.org_id, userId: SYSTEM_USER }, (trx) =>
-      applyIssue(trx, r.org_id, r.project_id, issue, 'webhook'),
-    );
-  return rows.length;
-}
-
 /**
- * Repairs anything webhooks missed (HLD §5.4): asks Jira for linked, not-yet-done issues updated
- * since the last pass. Looks back a day beyond the bookmark because Jira evaluates JQL dates in the
- * API user's timezone; re-applying an unchanged issue is a no-op.
+ * Brings our copies up to date with Jira (HLD §5.4). There is no platform Jira account, so each defect
+ * is read through its reporter's connection, or another active connection on the same site when the
+ * reporter has none. Looks back a day beyond the bookmark because Jira evaluates JQL dates in the
+ * account's timezone; re-applying an unchanged issue is a no-op.
  */
 export async function reconcileProject(
   trx: Tx,
-  jira: JiraClient,
+  accounts: JiraAccounts,
   orgId: string,
   projectId: string,
 ): Promise<number> {
@@ -702,54 +729,73 @@ export async function reconcileProject(
     .executeTakeFirst();
   const since = new Date((state?.last_run_at.getTime() ?? 0) - 86_400_000);
   const started = new Date();
-  // Open defects, plus recently finished ones: a reopen whose webhook was lost must still come back.
-  const open = await trx
-    .selectFrom('defect.defect')
-    .select('jira_key')
-    .where('project_id', '=', projectId)
-    .where((eb) =>
-      eb.or([
-        eb('status_category', '!=', 'done'),
-        eb('synced_at', '>', new Date(Date.now() - 14 * 86_400_000)),
-      ]),
-    )
-    .execute();
-  let changed = 0;
-  try {
-    for (let i = 0; i < open.length; i += 50) {
-      const keys = open.slice(i, i + 50).map((d) => d.jira_key);
-      const stamp = since.toISOString().slice(0, 16).replace('T', ' ');
-      const { issues } = await jira.search(
-        `key in (${keys.join(', ')}) AND updated >= ${jqlString(stamp)}`,
-        50,
-      );
-      for (const issue of issues) if (await applyIssue(trx, orgId, projectId, issue, 'reconcile')) changed++;
-    }
-    await trx
-      .insertInto('defect.sync_state')
-      .values({ project_id: projectId, org_id: orgId, last_run_at: started, last_error: null })
-      .onConflict((oc) => oc.column('project_id').doUpdateSet({ last_run_at: started, last_error: null }))
-      .execute();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await trx
-      .insertInto('defect.sync_state')
-      .values({
-        project_id: projectId,
-        org_id: orgId,
-        last_run_at: state?.last_run_at ?? new Date(0),
-        last_error: message,
-      })
-      .onConflict((oc) => oc.column('project_id').doUpdateSet({ last_error: message }))
-      .execute();
+  // Open defects, plus recently finished ones: a reopen missed by an earlier pass must still come back.
+  const [open, target, connections] = await Promise.all([
+    trx
+      .selectFrom('defect.defect')
+      .select(['jira_key', 'created_by', 'site_url'])
+      .where('project_id', '=', projectId)
+      .where((eb) =>
+        eb.or([
+          eb('status_category', '!=', 'done'),
+          eb('synced_at', '>', new Date(Date.now() - 14 * 86_400_000)),
+        ]),
+      )
+      .execute(),
+    projectTarget(trx, projectId),
+    accounts.active(trx),
+  ]);
+
+  const byConnection = new Map<string, string[]>();
+  let orphans = 0;
+  for (const d of open) {
+    const site = d.site_url ?? target.siteUrl;
+    const fits = (c: (typeof connections)[number]) => !site || c.site_url === site;
+    const conn =
+      connections.find((c) => c.user_id === d.created_by && fits(c)) ?? connections.find((c) => fits(c));
+    if (!conn) orphans++;
+    else byConnection.set(conn.id, [...(byConnection.get(conn.id) ?? []), d.jira_key]);
   }
+
+  let changed = 0;
+  const problems: string[] = [];
+  for (const [connectionId, keys] of byConnection) {
+    const conn = connections.find((c) => c.id === connectionId)!;
+    const jira = accounts.clientOf(conn);
+    try {
+      for (let i = 0; i < keys.length; i += 50) {
+        const stamp = since.toISOString().slice(0, 16).replace('T', ' ');
+        const { issues } = await jira.search(
+          `key in (${keys.slice(i, i + 50).join(', ')}) AND updated >= ${jqlString(stamp)}`,
+          50,
+        );
+        for (const issue of issues) if (await applyIssue(trx, orgId, projectId, issue, 'reconcile')) changed++;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (err instanceof JiraError && err.status === 401) await accounts.markFailed(trx, connectionId, message);
+      problems.push(message);
+    }
+  }
+  if (orphans)
+    problems.push(
+      `${orphans} defect${orphans === 1 ? '' : 's'} can't be synced: nobody with access to their Jira site has connected Jira.`,
+    );
+  const lastError = problems.length ? problems.join(' ').slice(0, 1000) : null;
+  // The bookmark only moves when every defect was read, so nothing is skipped on the next pass.
+  const lastRun = problems.length ? (state?.last_run_at ?? new Date(0)) : started;
+  await trx
+    .insertInto('defect.sync_state')
+    .values({ project_id: projectId, org_id: orgId, last_run_at: lastRun, last_error: lastError })
+    .onConflict((oc) => oc.column('project_id').doUpdateSet({ last_run_at: lastRun, last_error: lastError }))
+    .execute();
   return changed;
 }
 
 /** Background reconciler: every project with open linked defects, on an interval. */
 export function startReconciler(
   db: Db,
-  jira: JiraClient,
+  accounts: JiraAccounts,
   log: { error(o: object, m: string): void },
   intervalMs = 15 * 60_000,
 ): () => void {
@@ -760,7 +806,7 @@ export function startReconciler(
     }>`SELECT * FROM defect.projects_to_reconcile()`.execute(db);
     for (const r of rows) {
       await withTenant(db, { orgId: r.org_id, userId: SYSTEM_USER }, (trx) =>
-        reconcileProject(trx, jira, r.org_id, r.project_id),
+        reconcileProject(trx, accounts, r.org_id, r.project_id),
       ).catch((err) => log.error({ err, projectId: r.project_id }, 'Jira reconcile failed'));
     }
   };
@@ -839,15 +885,13 @@ const linkedFromRun = (caseId: string) =>
  * Every Jira issue connected to a case, with its live status: issues linked to the case directly
  * (stories, tasks, epics, bugs) and bugs logged or linked from its failed run items.
  */
-export async function caseIssues(
-  trx: Tx,
-  jira: JiraClient,
-  projectId: string,
-  caseId: string,
-): Promise<CaseJiraLink[]> {
+export async function caseIssues(trx: Tx, projectId: string, caseId: string): Promise<CaseJiraLink[]> {
   const rows = await trx
     .selectFrom('defect.defect as d')
+    .leftJoin('defect.jira_project_map as m', 'm.project_id', 'd.project_id')
+    .leftJoin('defect.jira_connection as jc', 'jc.user_id', 'd.created_by')
     .select([
+      siteOf.as('site'),
       'd.id',
       'd.jira_key',
       'd.issue_type',
@@ -867,7 +911,7 @@ export async function caseIssues(
   return rows.map((r) => ({
     id: r.id,
     jiraKey: r.jira_key,
-    jiraUrl: jira.browseUrl(r.jira_key),
+    jiraUrl: browse(r.site, r.jira_key),
     issueType: r.issue_type,
     summary: r.summary,
     status: r.status,
@@ -905,6 +949,7 @@ export async function linkIssueToCase(
       project_id: projectId,
       jira_key: issue.key,
       jira_id: issue.id,
+      site_url: jira.cfg.baseUrl,
       created_by: caller.userId,
       ...fields,
     })
@@ -953,7 +998,7 @@ export async function unlinkIssueFromCase(
 
 /** The Jira project's workflow statuses, de-duplicated across issue types, in workflow order. */
 export async function jiraStatuses(trx: Tx, jira: JiraClient, projectId: string): Promise<JiraStatus[]> {
-  const key = await projectKey(trx, projectId);
+  const key = (await projectTarget(trx, projectId)).jiraKey;
   const types = await jiraCall(() => jira.projectStatuses(key));
   const seen = new Map<string, JiraStatus>();
   for (const t of types)

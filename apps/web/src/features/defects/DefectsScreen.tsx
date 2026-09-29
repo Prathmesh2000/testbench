@@ -1,6 +1,6 @@
 'use client';
 
-import type { DefectDetail, DefectRow, JiraStatus as JiraStatusInfo, SyncStatus } from '@tb/contracts';
+import type { AttachmentStatus, DefectDetail, DefectRow, JiraStatus as JiraStatusInfo, SyncStatus } from '@tb/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -11,6 +11,14 @@ import { api, ApiError, get, qs } from '@/lib/api';
 import { ago, dateTimeIST, fmt } from '@/lib/format';
 import { JiraStatus, RetestState, SeverityTag } from './defect-bits';
 import s from './defects.module.css';
+
+const ATTACHMENT_LABEL: Record<AttachmentStatus, string> = {
+  pending: 'Uploading soon',
+  uploading: 'Uploading…',
+  uploaded: 'Attached',
+  failed: 'Not attached',
+  linked_only: 'Too large, linked',
+};
 
 type View = 'all' | 'retest' | 'mine';
 type StatusFilter = 'open' | 'done' | 'any';
@@ -62,7 +70,7 @@ export function DefectsScreen() {
   };
 
   if (sync.data && !sync.data.connected) {
-    return <div className="page"><div className="empty" style={{ flex: 1 }}><Icon name="plug" size={22} /><div className="h1">Jira is not connected</div><div className="t2">Set JIRA_BASE_URL, JIRA_EMAIL and JIRA_API_TOKEN for core-api to log and track bugs.</div></div></div>;
+    return <div className="page"><div className="empty" style={{ flex: 1 }}><Icon name="plug" size={22} /><div className="h1">Nobody has connected Jira yet</div><div className="t2">Each tester connects their own Jira account, so bugs show their name in Jira.</div><Link href="/settings#jira" className="btn primary">Connect your Jira</Link></div></div>;
   }
 
   return (
@@ -227,6 +235,19 @@ function DefectDrawer({ defectId, onClose }: { defectId: string; onClose(): void
               </div>
             ))}
           </div>
+
+          {d.attachments.length > 0 && (
+            <div className={s.dsec}>
+              <div className="sec" style={{ marginBottom: 6 }}>Evidence in Jira · {fmt(d.attachments.length)}</div>
+              {d.attachments.map((a, n) => (
+                <div key={n} className="row" style={{ gap: 8, minHeight: 26, fontSize: 12.5 }} title={a.error ?? undefined}>
+                  <Icon name="paperclip" size={12} />
+                  <span className="trunc f1 t2">{a.fileName}</span>
+                  <span className={a.status === 'failed' ? 'err' : 't3'} style={{ fontSize: 11.5 }}>{ATTACHMENT_LABEL[a.status]}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className={s.dsec}>
             <div className="sec" style={{ marginBottom: 10 }}>History · {fmt(d.timeline.length)}</div>

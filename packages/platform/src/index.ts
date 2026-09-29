@@ -10,4 +10,5 @@ export * from './storage';
 export type * from './deps';
 export * from './relay';
 export * from './secrets';
+export * from './mask';
 export * from './collab-ticket';

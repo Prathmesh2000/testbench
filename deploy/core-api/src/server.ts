@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { AiService } from '@tb/ai';
 import { auditConsumer } from '@tb/audit';
-import { JiraClient, startReconciler } from '@tb/defect';
+import { JiraAccounts, startAttachmentWorker, startReconciler } from '@tb/defect';
 import { startRunPrepWorker } from '@tb/execution';
 import { KeycloakAdmin } from '@tb/iam';
 import { NotifyClient, notifier } from '@tb/notify-client';
@@ -36,15 +36,10 @@ const verify = createTokenVerifier({
   keys: await discoverRemoteKeys(cfg.OIDC_ISSUER),
 });
 const index = new CaseIndex(cfg.OPENSEARCH_URL);
-const jira =
-  cfg.JIRA_BASE_URL && cfg.JIRA_EMAIL && cfg.JIRA_API_TOKEN && cfg.JIRA_WEBHOOK_SECRET
-    ? new JiraClient({
-        baseUrl: cfg.JIRA_BASE_URL,
-        email: cfg.JIRA_EMAIL,
-        apiToken: cfg.JIRA_API_TOKEN,
-        webhookSecret: cfg.JIRA_WEBHOOK_SECRET,
-      })
-    : null;
+const jira = new JiraAccounts({
+  tokenSecret: cfg.JIRA_TOKEN_SECRET ?? null,
+  sitePattern: new RegExp(cfg.JIRA_SITE_PATTERN),
+});
 
 const notify =
   cfg.NOTIFY_URL && cfg.NOTIFY_SERVICE_KEY ? new NotifyClient(cfg.NOTIFY_URL, cfg.NOTIFY_SERVICE_KEY) : null;
@@ -84,20 +79,20 @@ const app = await buildApp({
   issuer: cfg.OIDC_ISSUER,
   gatewayUrl: cfg.AGENT_GATEWAY_URL ?? null,
   collab: { url: cfg.COLLAB_URL, secret: cfg.COLLAB_SECRET ?? null },
+  browser: { url: cfg.BROWSER_URL, secret: cfg.BROWSER_SECRET ?? null, allowPrivate: cfg.BROWSER_ALLOW_PRIVATE },
   calendarUrl: cfg.CALENDAR_URL ?? null,
   webUrl: cfg.WEB_URL,
   logLevel: cfg.LOG_LEVEL,
 });
-if (!jira) app.log.warn('Jira is not configured; defect features are disabled');
+if (!cfg.JIRA_TOKEN_SECRET) app.log.warn('JIRA_TOKEN_SECRET is not set; nobody can connect Jira');
 if (!notify) app.log.warn('The notification service is not configured; notifications are not sent');
 app.log.info({ mode: cfg.AI_MODE, localModel: cfg.AI_LOCAL_MODEL }, 'AI provider layer ready');
 
 await storage.ensureBucket();
 await index.ensure();
 await ensurePercolator(index);
-const stopReconciler = jira
-  ? startReconciler(db, jira, app.log, cfg.JIRA_RECONCILE_MINUTES * 60_000)
-  : () => {};
+const stopReconciler = startReconciler(db, jira, app.log, cfg.JIRA_RECONCILE_MINUTES * 60_000);
+const stopAttachments = startAttachmentWorker(db, storage, jira, app.log);
 const stoppers = [
   startBulkWorker(db, app.log),
   startRunPrepWorker(db, app.log),
@@ -107,6 +102,7 @@ const stoppers = [
     app.log,
   ),
   async () => stopReconciler(),
+  async () => stopAttachments(),
 ];
 
 // Graceful shutdown: stop taking requests, let workers finish their current chunk, then close pools.

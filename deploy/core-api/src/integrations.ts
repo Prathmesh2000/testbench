@@ -18,14 +18,19 @@ export const integrationRoutes: FastifyPluginAsync<ServiceDeps & { opts: AppOpti
         .selectFrom('defect.sync_state')
         .select((eb) => [eb.fn.max('last_run_at').as('last'), eb.fn.max('last_error').as('error')])
         .executeTakeFirst();
+      const people = await opts.jira.list(trx);
+      const active = people.filter((p) => p.status === 'active').length;
       const searchUp = await opts.index.ping();
       const ai = opts.ai.settings;
       return [
         {
           id: 'jira',
           name: 'Jira Cloud',
-          detail: opts.jira ? opts.jira.cfg.baseUrl : 'Set JIRA_BASE_URL, JIRA_EMAIL and JIRA_API_TOKEN',
-          state: !opts.jira ? 'not_configured' : sync?.error ? 'error' : 'connected',
+          // Each tester connects their own account (Settings → Jira); this only summarises who has.
+          detail: people.length
+            ? `${active} of ${people.length} connected people active · ${[...new Set(people.map((p) => p.siteUrl))].join(', ')}`
+            : 'Nobody has connected Jira yet. Each tester connects their own account in Settings → Jira.',
+          state: !people.length ? 'not_configured' : sync?.error || active < people.length ? 'error' : 'connected',
           lastSync: sync?.last ? new Date(sync.last as Date).toISOString() : null,
         },
         {

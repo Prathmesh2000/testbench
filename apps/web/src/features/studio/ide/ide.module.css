@@ -1,0 +1,45 @@
+/* Code workspace IDE: explorer | editor with tabs, and a run/problems panel under the editor. */
+.ide { display: grid; grid-template-columns: 260px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100%; min-height: 0; }
+.explorer { display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--panel); min-height: 0; }
+.tree { flex: 1; overflow: auto; padding: 4px 0 12px; font-size: 12.5px; }
+.node { display: flex; align-items: center; gap: 4px; width: 100%; height: 26px; padding-right: 6px; border: 0; background: transparent; color: var(--text); cursor: pointer; text-align: left; font-size: 12.5px; }
+.node:hover { background: var(--hover); }
+.node.on { background: var(--sel); box-shadow: inset 2px 0 0 var(--accent); }
+.node .acts { display: none; margin-left: auto; gap: 2px; }
+.node:hover .acts, .node:focus-within .acts { display: inline-flex; }
+.caret { width: 12px; display: inline-flex; justify-content: center; color: var(--text3); font-size: 10px; }
+.inline { height: 24px; font-size: 12px; margin: 2px 6px; }
+.work { display: grid; grid-template-rows: 34px minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+.tabs { display: flex; align-items: stretch; overflow-x: auto; border-bottom: 1px solid var(--border); background: var(--panel); }
+.tab { display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 0; border-right: 1px solid var(--soft); background: transparent; color: var(--text2); cursor: pointer; font-size: 12px; white-space: nowrap; }
+.tab.on { background: var(--bg); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text2); }
+.editor { min-height: 0; background: var(--bg); }
+.panel { border-top: 1px solid var(--border); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+.panelBar { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-bottom: 1px solid var(--soft); flex-wrap: nowrap; }
+.panelBody { overflow: auto; padding: 8px 12px; font-size: 12.5px; }
+.result { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
+.err { font-family: var(--font-mono), monospace; font-size: 11.5px; white-space: pre-wrap; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin: 4px 0 6px 20px; max-height: 200px; overflow: auto; }
+.problem { display: flex; gap: 8px; width: 100%; padding: 3px 0; border: 0; background: transparent; color: var(--text); text-align: left; cursor: pointer; font-size: 12px; }
+.problem:hover { background: var(--hover); }
+.empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text3); font-size: 13px; }
+
+@media (max-width: 900px) {
+  .ide { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .explorer { max-height: 30vh; }
+}
+
+/* Site pane: the page under test beside the editor, with its locator inspector under it. */
+.site { display: grid; grid-template-rows: 34px auto minmax(0, 1fr) auto; border-left: 1px solid var(--border); background: var(--panel); min-width: 0; min-height: 0; }
+.siteBar { display: flex; align-items: center; gap: 6px; padding: 0 8px; border-bottom: 1px solid var(--soft); }
+.setup { padding: 8px 10px; border-bottom: 1px solid var(--soft); display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; background: var(--bg); }
+.setup code { font-family: var(--font-mono), monospace; font-size: 10.5px; word-break: break-all; background: var(--panel); border: 1px solid var(--border); border-radius: 3px; padding: 3px 5px; }
+.frameWrap { position: relative; min-height: 0; background: #fff; }
+.frame { width: 100%; height: 100%; border: 0; display: block; }
+.waiting { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px 10px; font-size: 11.5px; background: var(--panel); border-top: 1px solid var(--border); color: var(--text2); }
+.inspector { border-top: 1px solid var(--border); padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; max-height: 40%; overflow: auto; font-size: 12px; }
+.cand { display: flex; gap: 6px; align-items: baseline; width: 100%; text-align: left; padding: 3px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); cursor: pointer; }
+.cand.on { border-color: var(--accent); background: var(--accent-soft); }
+.cand code { font-family: var(--font-mono), monospace; font-size: 10.5px; word-break: break-all; }
+.uniq { font-size: 10px; color: var(--passed); white-space: nowrap; }
+.dup { font-size: 10px; color: var(--blocked); white-space: nowrap; }

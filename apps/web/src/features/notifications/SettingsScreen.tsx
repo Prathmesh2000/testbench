@@ -7,10 +7,11 @@ import { Icon } from '@/components/Icon';
 import { usePrefs, useSession, useToast } from '@/components/providers';
 import { AccessTokens } from '@/features/admin/AccessTokens';
 import { AiSettings } from '@/features/ai/AiSettings';
+import { JiraSettings } from '@/features/defects/JiraSettings';
 import { api, ApiError, get } from '@/lib/api';
 import s from './notify.module.css';
 
-/** Personal settings (notifications, quiet hours, display) and the organisation's AI settings. */
+/** Personal settings (notifications, Jira, quiet hours, display) and the organisation's AI settings. */
 export function SettingsScreen() {
   const { me, can } = useSession();
   const prefs = usePrefs();
@@ -77,6 +78,8 @@ export function SettingsScreen() {
           </div>
         )}
       </section>
+
+      <JiraSettings />
 
       {can('ai.use') && <AiSettings />}
 

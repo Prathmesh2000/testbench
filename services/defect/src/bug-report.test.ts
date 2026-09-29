@@ -18,7 +18,11 @@ const ctx: BugContext = {
   ],
   failedAt: 2,
   actual: 'Status stayed PENDING',
-  evidence: ['pending.png'],
+  data: { vpa: '••••@okaxis', amount: '₹499' },
+  evidence: [
+    { fileName: 'pending.png', contentType: 'image/png', sizeBytes: 245_760 },
+    { fileName: 'session.webm', contentType: 'video/webm', sizeBytes: 3_250_000 },
+  ],
   reporter: 'Sneha Iyer',
   link: 'http://localhost:3000/runs/x',
 };
@@ -43,8 +47,16 @@ describe('bug report', () => {
     expect(text).toContain('Pay with UPI collect [vpa: qa@okaxis]');
     expect(text).toContain('Status is EXPIRED');
     expect(text).toContain('Status stayed PENDING');
-    expect(text).toContain('pending.png');
+    expect(text).toContain('pending.png (screenshot, 240 KB)');
+    expect(text).toContain('session.webm (recording, 3.1 MB)');
+    expect(text).toContain('vpa = ••••@okaxis · amount = ₹499');
     expect(text).not.toContain('Refresh the page');
+  });
+
+  it('leaves out test data and attachments when there are none', () => {
+    const text = plain(bugDescription({ ...ctx, data: null, evidence: [] }));
+    expect(text).not.toContain('Test data: ');
+    expect(text).not.toContain('Attachments');
   });
 
   it('omits expected and actual when no step failed', () => {

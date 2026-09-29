@@ -1,15 +1,18 @@
 // Local stand-in for Jira Cloud (HLD §10). Implements only the REST API subset Testbench uses:
-// create/get issue, comments, transitions and JQL search, with Basic auth and Jira-style webhooks
-// signed with X-Hub-Signature. A page at http://localhost:8090 moves bugs between statuses, which
-// is how a developer "fixes" a bug locally. No dependencies: it runs straight from node:24-alpine.
+// create/get issue, comments, transitions, attachments, JQL search, projects and the current user,
+// with Basic auth. Any email works with the sandbox token and acts as its own Jira user, so per-tester
+// connections can be tried locally. A page at http://localhost:8090 moves bugs between statuses,
+// which is how a developer "fixes" a bug locally. No dependencies: runs straight from node:24-alpine.
 
-import { createHmac } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 
 const TOKEN = process.env.JIRA_SANDBOX_TOKEN ?? 'jira-sandbox-token';
-const WEBHOOK_URL = process.env.JIRA_WEBHOOK_URL;
-const WEBHOOK_SECRET = process.env.JIRA_WEBHOOK_SECRET ?? '';
+// Per-file limit reported to clients; small enough that tests can exercise the "too large" path.
+const UPLOAD_LIMIT = Number(process.env.JIRA_UPLOAD_LIMIT ?? 10 * 1024 * 1024);
+const PROJECTS = [{ key: 'PAY', name: 'Payments' }, { key: 'CI', name: 'CI sandbox' }, { key: 'OPS', name: 'Operations' }];
+const ISSUE_TYPES = ['Bug', 'Story', 'Task', 'Epic'];
 const DATA = process.env.JIRA_DATA ?? './issues.json';
 const PORT = 8090;
 
@@ -67,7 +70,7 @@ function save() {
   writeFileSync(DATA, JSON.stringify(db, null, 2));
 }
 
-function createIssue(fields, quiet = false) {
+function createIssue(fields, quiet = false, reporter = 'Testbench') {
   const key = `${fields.project?.key ?? 'PAY'}-${db.next++}`;
   const now = new Date().toISOString();
   const issue = {
@@ -83,6 +86,8 @@ function createIssue(fields, quiet = false) {
       labels: fields.labels ?? [],
       assignee: { displayName: DEVELOPERS[db.next % DEVELOPERS.length] },
       fixVersions: [{ name: '4.18.0' }],
+      reporter: { displayName: reporter },
+      attachment: [],
       created: now,
       updated: now,
       comment: { comments: [] },
@@ -93,21 +98,11 @@ function createIssue(fields, quiet = false) {
   return issue;
 }
 
-function sendWebhook(issue, event = 'jira:issue_updated') {
-  if (!WEBHOOK_URL) return;
-  const body = JSON.stringify({ timestamp: Date.now(), webhookEvent: event, issue });
-  const signature = `sha256=${createHmac('sha256', WEBHOOK_SECRET).update(body).digest('hex')}`;
-  fetch(WEBHOOK_URL, { method: 'POST', headers: { 'content-type': 'application/json', 'x-hub-signature': signature }, body })
-    .then((r) => console.log(`webhook ${event} ${issue.key} -> ${r.status}`))
-    .catch((err) => console.log(`webhook ${event} ${issue.key} failed: ${err.message}`));
-}
-
 function transition(issue, id) {
   if (!STATUSES[id]) return false;
   issue.fields.status = statusField(id);
   issue.fields.updated = new Date().toISOString();
   save();
-  sendWebhook(issue);
   return true;
 }
 
@@ -133,13 +128,17 @@ function matches(issue, jql) {
 
 // ---------- HTTP ----------
 const json = (res, status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(body === undefined ? '' : JSON.stringify(body)); };
-const readBody = (req) => new Promise((resolve) => { let data = ''; req.on('data', (c) => (data += c)); req.on('end', () => resolve(data)); });
-const authorised = (req) => {
+const readRaw = (req) => new Promise((resolve) => { const parts = []; req.on('data', (c) => parts.push(c)); req.on('end', () => resolve(Buffer.concat(parts))); });
+const readBody = async (req) => (await readRaw(req)).toString('utf8');
+/** The email the caller authenticated with, or null. Any email is accepted with the sandbox token. */
+const caller = (req) => {
   const header = req.headers.authorization ?? '';
-  if (!header.startsWith('Basic ')) return false;
-  const [, token] = Buffer.from(header.slice(6), 'base64').toString().split(':');
-  return token === TOKEN;
+  if (!header.startsWith('Basic ')) return null;
+  const decoded = Buffer.from(header.slice(6), 'base64').toString();
+  const at = decoded.lastIndexOf(':');
+  return decoded.slice(at + 1) === TOKEN ? decoded.slice(0, at) : null;
 };
+const nameOf = (email) => email.split('@')[0].split(/[._-]/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 function page() {
@@ -150,7 +149,7 @@ function page() {
   return `<!doctype html><meta charset="utf-8"><title>Jira sandbox</title>
   <style>body{font:14px system-ui;margin:24px;background:#111214;color:#e6e7ea}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #2b2d33;padding:6px 8px;text-align:left;vertical-align:top}
   form{display:inline}button{margin:0 2px;background:#1e2024;color:#e6e7ea;border:1px solid #2b2d33;border-radius:4px;padding:2px 8px;cursor:pointer}button[disabled]{opacity:.4}.c{font-size:12px;color:#a2a5ad}</style>
-  <h2>Jira sandbox</h2><p>Changing a status sends a signed <code>jira:issue_updated</code> webhook to Testbench.</p>
+  <h2>Jira sandbox</h2><p>Testbench picks up status changes on its next sync (Defects → Sync now, or every few minutes).</p>
   <table><tr><th>Key</th><th>Summary</th><th>Status</th><th>Move to</th><th>Comments</th></tr>${rows}</table>`;
 }
 
@@ -169,13 +168,39 @@ createServer(async (req, res) => {
     }
 
     if (!path.startsWith('/rest/api/3/')) return json(res, 404, { errorMessages: ['Not found'] });
-    if (!authorised(req)) return json(res, 401, { errorMessages: ['Client must be authenticated to access this resource.'] });
+    const email = caller(req);
+    if (!email) return json(res, 401, { errorMessages: ['Client must be authenticated to access this resource.'] });
+
+    // Attachments are multipart, so they are handled before the JSON body is read.
+    const att = /^\/rest\/api\/3\/issue\/([A-Z][A-Z0-9]*-\d+)\/attachments$/.exec(path);
+    if (att && req.method === 'POST') {
+      if (req.headers['x-atlassian-token'] !== 'no-check') return json(res, 403, { errorMessages: ['XSRF check failed'] });
+      const issue = db.issues[att[1]];
+      if (!issue) return json(res, 404, { errorMessages: ['Issue does not exist or you do not have permission to see it.'] });
+      const raw = await readRaw(req);
+      if (raw.length > UPLOAD_LIMIT + 4096) return json(res, 413, { errorMessages: ['The file is larger than the upload limit.'] });
+      const filename = /filename="([^"]+)"/.exec(raw.toString('latin1'))?.[1] ?? 'file';
+      const created = { id: String(Date.now()), filename, size: raw.length, author: { displayName: nameOf(email) }, created: new Date().toISOString() };
+      (issue.fields.attachment ??= []).push(created);
+      save();
+      return json(res, 200, [created]);
+    }
+
     const body = req.method === 'POST' ? JSON.parse((await readBody(req)) || '{}') : {};
+
+    if (path === '/rest/api/3/myself' && req.method === 'GET')
+      return json(res, 200, { accountId: createHash('sha256').update(email).digest('hex').slice(0, 24), displayName: nameOf(email), emailAddress: email });
+    if (path === '/rest/api/3/project/search' && req.method === 'GET') return json(res, 200, { values: PROJECTS, isLast: true });
+    if (path === '/rest/api/3/attachment/meta' && req.method === 'GET') return json(res, 200, { enabled: true, uploadLimit: UPLOAD_LIMIT });
+    const meta = /^\/rest\/api\/3\/issue\/createmeta\/([A-Z][A-Z0-9_]*)\/issuetypes$/.exec(path);
+    if (meta && req.method === 'GET') {
+      if (!PROJECTS.some((p) => p.key === meta[1])) return json(res, 404, { errorMessages: [`No project could be found with key '${meta[1]}'.`] });
+      return json(res, 200, { issueTypes: ISSUE_TYPES.map((name, i) => ({ id: String(10001 + i), name })) });
+    }
 
     if (path === '/rest/api/3/issue' && req.method === 'POST') {
       if (!body.fields?.summary) return json(res, 400, { errors: { summary: 'You must specify a summary of the issue.' } });
-      const issue = createIssue(body.fields);
-      sendWebhook(issue, 'jira:issue_created');
+      const issue = createIssue(body.fields, false, nameOf(email));
       return json(res, 201, { id: issue.id, key: issue.key, self: `http://localhost:${PORT}/rest/api/3/issue/${issue.id}` });
     }
     if (path === '/rest/api/3/search/jql' && req.method === 'POST') {
@@ -194,7 +219,7 @@ createServer(async (req, res) => {
       if (!issue) return json(res, 404, { errorMessages: ['Issue does not exist or you do not have permission to see it.'] });
       if (!m[2] && req.method === 'GET') return json(res, 200, issue);
       if (m[2] === '/comment' && req.method === 'POST') {
-        const comment = { id: String(Date.now()), body: body.body, created: new Date().toISOString(), author: { displayName: 'Testbench' } };
+        const comment = { id: String(Date.now()), body: body.body, created: new Date().toISOString(), author: { displayName: nameOf(email) } };
         issue.fields.comment.comments.push(comment);
         issue.fields.updated = comment.created;
         save();

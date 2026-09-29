@@ -1,10 +1,10 @@
 import type { AdfDoc } from './bug-report';
 
+/** One person's Jira account: everything the client does shows as them in Jira. */
 export interface JiraConfig {
   baseUrl: string;
   email: string;
   apiToken: string;
-  webhookSecret: string;
 }
 
 export interface JiraIssue {
@@ -40,19 +40,15 @@ const MAX_CONCURRENT = 4;
 const TIMEOUT_MS = 10_000;
 
 /**
- * Jira Cloud REST v3 client (API-token auth; OAuth 3LO as the user comes with the admin console).
- * All calls to one site share a small concurrency limit and honour Retry-After on 429, so a burst of
- * bug logging cannot get the whole Jira site throttled (HLD §7.2).
+ * Jira Cloud REST v3 client for one person's account (API-token auth; OAuth comes later). Calls through
+ * one client share a small concurrency limit and honour Retry-After on 429, so a burst of bug logging
+ * cannot get the account throttled (HLD §7.2).
  */
 export class JiraClient {
   private active = 0;
   private readonly waiting: (() => void)[] = [];
 
   constructor(readonly cfg: JiraConfig) {}
-
-  browseUrl(key: string): string {
-    return `${this.cfg.baseUrl.replace(/\/$/, '')}/browse/${key}`;
-  }
 
   private async slot<T>(fn: () => Promise<T>): Promise<T> {
     if (this.active >= MAX_CONCURRENT) await new Promise<void>((r) => this.waiting.push(r));
@@ -65,17 +61,26 @@ export class JiraClient {
     }
   }
 
-  private async request<T>(method: string, path: string, body?: unknown, attempt = 1): Promise<T> {
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    attempt = 1,
+    timeoutMs = TIMEOUT_MS,
+  ): Promise<T> {
+    const form = body instanceof FormData;
     const res = await this.slot(() =>
       fetch(`${this.cfg.baseUrl.replace(/\/$/, '')}${path}`, {
         method,
         headers: {
           authorization: `Basic ${Buffer.from(`${this.cfg.email}:${this.cfg.apiToken}`).toString('base64')}`,
           accept: 'application/json',
-          ...(body !== undefined && { 'content-type': 'application/json' }),
+          ...(body !== undefined && !form && { 'content-type': 'application/json' }),
+          // Jira refuses multipart uploads without this header (its XSRF guard for form posts).
+          ...(form && { 'x-atlassian-token': 'no-check' }),
         },
-        body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        body: body === undefined ? undefined : form ? body : JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
       }).catch((err: Error) => {
         throw new JiraError(
           503,
@@ -86,7 +91,7 @@ export class JiraClient {
     if (res.status === 429 && attempt < 3) {
       const wait = Math.min(Number(res.headers.get('retry-after') ?? '2'), 30) * 1000;
       await new Promise((r) => setTimeout(r, wait));
-      return this.request(method, path, body, attempt + 1);
+      return this.request(method, path, body, attempt + 1, timeoutMs);
     }
     if (!res.ok) {
       const data = (await res.json().catch(() => null)) as {
@@ -99,8 +104,54 @@ export class JiraClient {
     return (res.status === 204 ? undefined : await res.json()) as T;
   }
 
+  /** The account behind the token; used to verify a connection and label it with the person's name. */
+  myself() {
+    return this.request<{ accountId: string; displayName: string; emailAddress?: string }>(
+      'GET',
+      '/rest/api/3/myself',
+    );
+  }
+
+  /** Projects this account can see, for the project mapping picker. */
+  async projects(): Promise<{ key: string; name: string }[]> {
+    const page = await this.request<{ values: { key: string; name: string }[] }>(
+      'GET',
+      '/rest/api/3/project/search?maxResults=100&orderBy=name',
+    );
+    return page.values.map((p) => ({ key: p.key, name: p.name }));
+  }
+
+  /** Issue types this account may create in a project (throws 404 when the project isn't visible). */
+  async issueTypes(projectKey: string): Promise<string[]> {
+    const res = await this.request<{ issueTypes?: { name: string }[]; values?: { name: string }[] }>(
+      'GET',
+      `/rest/api/3/issue/createmeta/${encodeURIComponent(projectKey)}/issuetypes`,
+    );
+    return (res.issueTypes ?? res.values ?? []).map((t) => t.name);
+  }
+
+  /** Whether the site accepts attachments and its per-file limit in bytes (set by the site admin). */
+  attachmentSettings() {
+    return this.request<{ enabled: boolean; uploadLimit: number }>('GET', '/rest/api/3/attachment/meta');
+  }
+
+  async attach(key: string, file: { name: string; contentType: string; bytes: Uint8Array }) {
+    const form = new FormData();
+    form.append('file', new Blob([file.bytes], { type: file.contentType }), file.name);
+    const [created] = await this.request<{ id: string }[]>(
+      'POST',
+      `/rest/api/3/issue/${encodeURIComponent(key)}/attachments`,
+      form,
+      1,
+      // Large screenshots and recordings need longer than an ordinary API call.
+      120_000,
+    );
+    return created;
+  }
+
   createIssue(fields: {
     projectKey: string;
+    issueType: string;
     summary: string;
     description: AdfDoc;
     priority: string;
@@ -109,7 +160,7 @@ export class JiraClient {
     return this.request<{ id: string; key: string }>('POST', '/rest/api/3/issue', {
       fields: {
         project: { key: fields.projectKey },
-        issuetype: { name: 'Bug' },
+        issuetype: { name: fields.issueType },
         summary: fields.summary,
         description: fields.description,
         priority: { name: fields.priority },

@@ -1,23 +1,25 @@
 import {
+  ConnectJiraBody,
   DefectListQuery,
+  JiraMappingBody,
   LinkBugBody,
   LinkIssueBody,
   LogBugBody,
   parseCaseKey,
   RetestBody,
 } from '@tb/contracts';
-import { projectTx } from '@tb/iam';
-import { AppError, notFound, type ServiceDeps, type Tx } from '@tb/platform';
+import { orgTx, projectTx, tenantTx } from '@tb/iam';
+import { notFound, type ServiceDeps, type Tx } from '@tb/platform';
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { getMapping, jiraProjects, projectTarget, setMapping, type JiraAccounts } from './accounts';
 import {
   caseIssues,
   getDefect,
   jiraStatuses,
   linkIssueToCase,
   unlinkIssueFromCase,
-  handleWebhookIssue,
   linkBug,
   listDefects,
   logBug,
@@ -26,8 +28,6 @@ import {
   similarDefects,
   syncStatus,
 } from './defects';
-import type { JiraClient, JiraIssue } from './jira';
-import { verifySignature } from './webhook';
 
 const Project = z.object({ projectId: z.uuid() });
 const CaseParams = Project.extend({ key: z.string().regex(/^TC-\d+$/i) });
@@ -51,41 +51,60 @@ const callerOf = (req: FastifyRequest) => ({
 });
 
 interface DefectDeps extends ServiceDeps {
-  /** Null when no Jira site is configured: every defect route then answers 503 with a clear message. */
-  jira: JiraClient | null;
+  accounts: JiraAccounts;
   webUrl: string;
 }
 
-export const defectRoutes: FastifyPluginAsync<DefectDeps> = async (app, { db, cache, jira, webUrl }) => {
+export const defectRoutes: FastifyPluginAsync<DefectDeps> = async (app, { db, cache, accounts, webUrl }) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
-  const connected = (): JiraClient => {
-    if (!jira)
-      throw new AppError(
-        503,
-        'jira_not_connected',
-        'Jira is not connected. Set JIRA_BASE_URL, JIRA_EMAIL and JIRA_API_TOKEN.',
-      );
-    return jira;
-  };
+  /** The caller's own Jira account, checked against the site this project files bugs on. */
+  const mine = async (trx: Tx, req: FastifyRequest, projectId: string) =>
+    accounts.forUser(trx, req.auth.userId, (await projectTarget(trx, projectId)).siteUrl);
 
+  // ---------- the caller's Jira connection ----------
+  r.get('/me/jira', async (req) => tenantTx(db, req, (trx) => accounts.mine(trx, req.auth.userId)));
+  r.put('/me/jira', { schema: { body: ConnectJiraBody } }, async (req) =>
+    tenantTx(db, req, (trx) => accounts.connect(trx, callerOf(req), req.body)),
+  );
+  r.delete('/me/jira', async (req, reply) => {
+    await tenantTx(db, req, (trx) => accounts.disconnect(trx, req.auth.userId));
+    return reply.status(204).send();
+  });
+  r.get('/me/jira/projects', async (req) =>
+    tenantTx(db, req, (trx) => jiraProjects(trx, accounts, req.auth.userId)),
+  );
+  r.get('/admin/jira/connections', async (req) => orgTx(db, req, 'member.manage', (trx) => accounts.list(trx)));
+
+  // ---------- project mapping ----------
+  r.get('/projects/:projectId/jira/mapping', { schema: { params: Project } }, async (req) =>
+    projectTx(db, req, req.params.projectId, 'run.read', (trx) => getMapping(trx, req.params.projectId)),
+  );
+  r.put(
+    '/projects/:projectId/jira/mapping',
+    { schema: { params: Project, body: JiraMappingBody } },
+    async (req) => {
+      const mapping = await projectTx(db, req, req.params.projectId, 'project.manage', (trx) =>
+        setMapping(trx, accounts, callerOf(req), req.params.projectId, req.body),
+      );
+      await cache.del(`jira-statuses:${req.params.projectId}`);
+      return mapping;
+    },
+  );
+
+  // Viewing defects needs no Jira account: it reads our synced copies.
   r.get(
     '/projects/:projectId/defects',
     { schema: { params: Project, querystring: DefectListQuery } },
     async (req) =>
       projectTx(db, req, req.params.projectId, 'run.read', (trx) =>
-        listDefects(trx, connected(), callerOf(req), req.params.projectId, req.query),
+        listDefects(trx, callerOf(req), req.params.projectId, req.query),
       ),
   );
 
   // ---------- Jira issues on a case ----------
   r.get('/projects/:projectId/cases/:key/jira', { schema: { params: CaseParams } }, async (req) =>
     projectTx(db, req, req.params.projectId, 'case.read', async (trx) =>
-      caseIssues(
-        trx,
-        connected(),
-        req.params.projectId,
-        await caseIdOf(trx, req.params.projectId, req.params.key),
-      ),
+      caseIssues(trx, req.params.projectId, await caseIdOf(trx, req.params.projectId, req.params.key)),
     ),
   );
   r.post(
@@ -95,7 +114,7 @@ export const defectRoutes: FastifyPluginAsync<DefectDeps> = async (app, { db, ca
       await projectTx(db, req, req.params.projectId, 'case.write', async (trx) =>
         linkIssueToCase(
           trx,
-          connected(),
+          await mine(trx, req, req.params.projectId),
           callerOf(req),
           req.params.projectId,
           await caseIdOf(trx, req.params.projectId, req.params.key),
@@ -125,21 +144,20 @@ export const defectRoutes: FastifyPluginAsync<DefectDeps> = async (app, { db, ca
       const key = `jira-statuses:${req.params.projectId}`;
       const hit = await cache.get<Awaited<ReturnType<typeof jiraStatuses>>>(key);
       if (hit) return hit;
-      const statuses = await jiraStatuses(trx, connected(), req.params.projectId);
+      const site = (await projectTarget(trx, req.params.projectId)).siteUrl;
+      const statuses = await jiraStatuses(trx, await accounts.readerFor(trx, req.auth.userId, site), req.params.projectId);
       await cache.set(key, statuses, STATUS_TTL_S);
       return statuses;
     }),
   );
 
   r.get('/projects/:projectId/defects/sync', { schema: { params: Project } }, async (req) =>
-    projectTx(db, req, req.params.projectId, 'run.read', async (trx) =>
-      jira ? syncStatus(trx, req.params.projectId) : { connected: false, lastSyncAt: null, lastError: null },
-    ),
+    projectTx(db, req, req.params.projectId, 'run.read', (trx) => syncStatus(trx, req.params.projectId)),
   );
 
   r.post('/projects/:projectId/defects/sync', { schema: { params: Project } }, async (req) =>
     projectTx(db, req, req.params.projectId, 'run.execute', async (trx) => ({
-      changed: await reconcileProject(trx, connected(), req.auth.orgId, req.params.projectId),
+      changed: await reconcileProject(trx, accounts, req.auth.orgId, req.params.projectId),
     })),
   );
 
@@ -149,8 +167,13 @@ export const defectRoutes: FastifyPluginAsync<DefectDeps> = async (app, { db, ca
       schema: { params: Project, querystring: z.object({ summary: z.string().trim().min(3).max(250) }) },
     },
     async (req) =>
-      projectTx(db, req, req.params.projectId, 'run.read', (trx) =>
-        similarDefects(trx, connected(), req.params.projectId, req.query.summary),
+      projectTx(db, req, req.params.projectId, 'run.read', async (trx) =>
+        similarDefects(
+          trx,
+          await accounts.tryForUser(trx, req.auth.userId, (await projectTarget(trx, req.params.projectId)).siteUrl),
+          req.params.projectId,
+          req.query.summary,
+        ),
       ),
   );
 
@@ -158,8 +181,8 @@ export const defectRoutes: FastifyPluginAsync<DefectDeps> = async (app, { db, ca
     '/projects/:projectId/defects',
     { schema: { params: Project, body: LogBugBody } },
     async (req, reply) => {
-      const defect = await projectTx(db, req, req.params.projectId, 'run.execute', (trx) =>
-        logBug(trx, connected(), callerOf(req), req.params.projectId, webUrl, req.body),
+      const defect = await projectTx(db, req, req.params.projectId, 'run.execute', async (trx) =>
+        logBug(trx, await mine(trx, req, req.params.projectId), callerOf(req), req.params.projectId, webUrl, req.body),
       );
       return reply.status(201).send(defect);
     },
@@ -169,8 +192,8 @@ export const defectRoutes: FastifyPluginAsync<DefectDeps> = async (app, { db, ca
     '/projects/:projectId/defects/link',
     { schema: { params: Project, body: LinkBugBody } },
     async (req) =>
-      projectTx(db, req, req.params.projectId, 'run.execute', (trx) =>
-        linkBug(trx, connected(), callerOf(req), req.params.projectId, webUrl, req.body),
+      projectTx(db, req, req.params.projectId, 'run.execute', async (trx) =>
+        linkBug(trx, await mine(trx, req, req.params.projectId), callerOf(req), req.params.projectId, webUrl, req.body),
       ),
   );
 
@@ -179,7 +202,7 @@ export const defectRoutes: FastifyPluginAsync<DefectDeps> = async (app, { db, ca
     { schema: { params: Project.extend({ defectId: z.uuid() }) } },
     async (req) =>
       projectTx(db, req, req.params.projectId, 'run.read', (trx) =>
-        getDefect(trx, connected(), req.params.projectId, req.params.defectId),
+        getDefect(trx, req.params.projectId, req.params.defectId),
       ),
   );
 
@@ -187,41 +210,17 @@ export const defectRoutes: FastifyPluginAsync<DefectDeps> = async (app, { db, ca
     '/projects/:projectId/retests/:retestId',
     { schema: { params: Project.extend({ retestId: z.uuid() }), body: RetestBody } },
     async (req, reply) => {
-      await projectTx(db, req, req.params.projectId, 'run.execute', (trx) =>
-        recordRetest(trx, connected(), callerOf(req), req.params.projectId, req.params.retestId, req.body),
+      await projectTx(db, req, req.params.projectId, 'run.execute', async (trx) =>
+        recordRetest(
+          trx,
+          await mine(trx, req, req.params.projectId),
+          callerOf(req),
+          req.params.projectId,
+          req.params.retestId,
+          req.body,
+        ),
       );
       return reply.status(204).send();
     },
   );
-};
-
-/**
- * Jira webhook receiver, mounted outside /api/v1 because Jira has no user token. It is authenticated
- * by the HMAC signature instead, which needs the exact raw body; this plugin therefore reads JSON as
- * a string and parses it only after the signature checks out.
- */
-export const jiraWebhook: FastifyPluginAsync<{ db: ServiceDeps['db']; secret: string }> = async (
-  app,
-  { db, secret },
-) => {
-  app.addContentTypeParser(
-    'application/json',
-    { parseAs: 'string', bodyLimit: 1024 * 1024 },
-    (_req, body, done) => done(null, body),
-  );
-
-  app.post('/webhooks/jira', async (req, reply) => {
-    const raw = typeof req.body === 'string' ? req.body : '';
-    const signature = req.headers['x-hub-signature'];
-    if (!verifySignature(secret, raw, typeof signature === 'string' ? signature : undefined)) {
-      return reply
-        .status(401)
-        .send({ error: { code: 'bad_signature', message: 'Webhook signature does not match.' } });
-    }
-    const payload = JSON.parse(raw) as { webhookEvent?: string; issue?: JiraIssue };
-    if (!payload.issue?.key || !payload.issue.fields?.status)
-      return reply.status(202).send({ ignored: true });
-    const tenants = await handleWebhookIssue(db, payload.issue);
-    return reply.status(200).send({ applied: tenants });
-  });
 };

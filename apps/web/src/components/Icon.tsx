@@ -45,6 +45,10 @@ const PATHS = {
   history: 'M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.5V5H5M8 5v3l2 1.5',
   tree: 'M3 2.5h4v3H3zM9 10.5h4v3H9zM9 2.5h4v3H9zM5 5.5v6.5h4M7 4h2',
   plug: 'M6 1.5v3M10 1.5v3M4 4.5h8v3a4 4 0 0 1-8 0zM8 11.5v3',
+  globe: 'M8 14.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM1.5 8h13M8 1.5c1.8 1.8 2.7 4 2.7 6.5S9.8 12.7 8 14.5M8 1.5C6.2 3.3 5.3 5.5 5.3 8s.9 4.7 2.7 6.5',
+  camera: 'M2 5h2.5L6 3h4l1.5 2H14v8H2zM8 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  back: 'M10 3 5 8l5 5',
+  forward: 'M6 3l5 5-5 5',
 } as const;
 
 export type IconName = keyof typeof PATHS;

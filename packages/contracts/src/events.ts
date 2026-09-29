@@ -41,5 +41,7 @@ export const EVENT_TYPES = [
   'board.created',
   'meeting.scheduled',
   'action_item.converted',
+  'studio.test.saved',
+  'studio.component.versioned',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
