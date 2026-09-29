@@ -8,5 +8,7 @@ test-results/
 *.tsbuildinfo
 .env
 .env.local
-# Claude Code session files (scheduled task locks etc.), not project content
-.claude/
+# Claude Code session files (scheduled task locks etc.), not project content.
+# Skills are the exception: they are shared repo conventions, so they are committed.
+.claude/*
+!.claude/skills/

@@ -1,0 +1,60 @@
+# Makes the PR checklist real. `check` is fast and runs on every push; `integration` brings up the
+# local Docker stack and runs the core-api tests against it, so it is slower and runs after `check`.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, types, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      # core-api's tests need Postgres, OpenSearch and the rest, so they run in the integration job.
+      - run: pnpm turbo run test --filter='!@tb/core-api'
+
+  integration:
+    name: API tests on the local stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The harness reads .env; the example file points at the local stack and holds no real secrets.
+      - run: cp .env.example .env
+      - run: pnpm infra:up
+      - run: pnpm db:migrate
+      # No seed: the harness creates its own organisations and users and deletes them afterwards.
+      - run: pnpm turbo run test --filter=@tb/core-api
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose -f infra/local/docker-compose.yml logs --tail=100
