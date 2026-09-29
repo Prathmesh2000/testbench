@@ -1,6 +1,25 @@
 {
   "name": "testbench",
+  "version": "0.1.0",
   "private": true,
+  "description": "Test management for testers: test cases, runs, execution, Jira, notifications, analytics and a testing studio for automation.",
+  "license": "MIT",
+  "author": "Prathmesh",
+  "homepage": "https://github.com/Prathmesh2000/testbench#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Prathmesh2000/testbench.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Prathmesh2000/testbench/issues"
+  },
+  "keywords": [
+    "test-management",
+    "test-automation",
+    "playwright",
+    "jira",
+    "qa"
+  ],
   "type": "module",
   "packageManager": "pnpm@11.1.2",
   "engines": {
