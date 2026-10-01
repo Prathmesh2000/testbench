@@ -11,9 +11,11 @@
     "lint": "eslint src"
   },
   "dependencies": {
+    "@tb/ai": "workspace:*",
     "@tb/contracts": "workspace:*",
     "@tb/iam": "workspace:*",
     "@tb/platform": "workspace:*",
+    "@tb/repository": "workspace:*",
     "fastify": "^5.12.5",
     "fastify-type-provider-zod": "^7.0.0",
     "kysely": "^0.29.6",

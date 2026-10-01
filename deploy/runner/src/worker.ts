@@ -4,8 +4,19 @@ import { createRequire } from 'node:module';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CODE_PATH } from '@tb/contracts';
-import { withTenant, type Db, type ObjectStorage } from '@tb/platform';
+import { devices } from '@playwright/test';
+import {
+  BROWSER_ARGS,
+  BROWSER_LOCALE,
+  BROWSER_TIMEZONE,
+  desktopUserAgent,
+  withTenant,
+  type Db,
+  type JsonCache,
+  type ObjectStorage,
+} from '@tb/platform';
 import { sql } from 'kysely';
+import { LIVE_HOOK, LIVE_HOOK_FILE, LIVE_REPORTER, LIVE_REPORTER_FILE, publishLive } from './live';
 import { readReport, type Outcome, type PwReport } from './report';
 
 // One automated run item, end to end: generated spec on disk, a Playwright process, the result and
@@ -19,6 +30,8 @@ const CLI = createRequire(import.meta.url).resolve('@playwright/test/cli');
 export interface RunnerDeps {
   db: Db;
   storage: ObjectStorage;
+  /** Where live frames go; null runs without a live view. */
+  cache: JsonCache | null;
 }
 
 // RUNNER_HEADED=true (local only) opens a visible browser window for each test, so a developer can
@@ -26,17 +39,35 @@ export interface RunnerDeps {
 // at import, because the entrypoint loads .env after this module is imported.
 //
 // Every test keeps a final screenshot and a trace, pass or fail, so there is always something to look
-// at; video costs more, so it is kept only when a test fails.
+// at; video costs more, so it is kept only when a test fails. Full Chromium rather than the headless
+// shell, as in the Test Browser: bot protection on many public sites refuses the shell outright. The
+// browser presents itself as the Test Browser does (browser-profile.ts), so a script recorded there
+// meets the same site here.
 function configFile(): string {
   const headed = process.env.RUNNER_HEADED === 'true';
+  const launch = { args: BROWSER_ARGS, ...(headed ? { slowMo: 250 } : {}) };
+  const use = {
+    channel: 'chromium',
+    headless: !headed,
+    userAgent: desktopUserAgent(devices['Desktop Chrome']!.userAgent),
+    locale: BROWSER_LOCALE,
+    timezoneId: BROWSER_TIMEZONE,
+    launchOptions: launch,
+    // A missing element fails its step in a minute, not at the end of the whole test's budget.
+    actionTimeout: 60_000,
+    navigationTimeout: 60_000,
+    trace: 'on',
+    screenshot: 'on',
+    video: 'retain-on-failure',
+  };
   return `export default {
   testDir: '.',
   timeout: ${TEST_TIMEOUT_MS},
   retries: 0,
   workers: 1,
-  reporter: [['json', { outputFile: 'report.json' }]],
+  reporter: [['json', { outputFile: 'report.json' }], ['./${LIVE_REPORTER_FILE}']],
   outputDir: 'out',
-  use: { headless: ${!headed}, trace: 'on', screenshot: 'on', video: 'retain-on-failure'${headed ? ", launchOptions: { slowMo: 250 }" : ''} },
+  use: ${JSON.stringify(use)},
 };
 `;
 }
@@ -48,7 +79,9 @@ function configFile(): string {
 function testEnv(data: Record<string, string>, env: Record<string, string>): NodeJS.ProcessEnv {
   const keep = ['PATH', 'Path', 'SystemRoot', 'TEMP', 'TMP', 'HOME', 'USERPROFILE', 'LOCALAPPDATA', 'PLAYWRIGHT_BROWSERS_PATH'];
   const base = Object.fromEntries(keep.filter((k) => process.env[k]).map((k) => [k, process.env[k]]));
-  return { ...base, CI: '1', TB_DATA: JSON.stringify(data), TB_ENV: JSON.stringify(env) };
+  // Until runs get a secret store, a test's secrets come from TB_SECRET_<name> on the runner.
+  const secrets = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.startsWith('TB_SECRET_')));
+  return { ...base, ...secrets, CI: '1', TB_DATA: JSON.stringify(data), TB_ENV: JSON.stringify(env) };
 }
 
 function runPlaywright(dir: string, env: NodeJS.ProcessEnv, spec: string | null): Promise<string> {
@@ -83,7 +116,7 @@ export async function claimItem(db: Db): Promise<{ id: string; org_id: string } 
   return rows[0] ?? null;
 }
 
-export async function runItem({ db, storage }: RunnerDeps, claimed: { id: string; org_id: string }): Promise<void> {
+export async function runItem({ db, storage, cache }: RunnerDeps, claimed: { id: string; org_id: string }): Promise<void> {
   const actor = { orgId: claimed.org_id, userId: SYSTEM_USER };
   const job = await withTenant(db, actor, async (trx) => {
     const row = await trx
@@ -115,9 +148,15 @@ export async function runItem({ db, storage }: RunnerDeps, claimed: { id: string
     // CommonJS lets specs import their page objects without file extensions, as Playwright projects do.
     await writeFile(join(dir, 'package.json'), '{ "private": true, "type": "commonjs" }\n');
     await writeFile(join(dir, 'playwright.config.mjs'), configFile());
+    await writeFile(join(dir, LIVE_REPORTER_FILE), LIVE_REPORTER);
     if (job.spec_path) await writeWorkspace(dir, job.workspace ?? {});
-    else await writeFile(join(dir, 'test.spec.ts'), job.code);
-    const stderr = await runPlaywright(dir, testEnv(job.data, { ...job.variables, baseUrl: job.base_url }), job.spec_path);
+    else {
+      // Generated specs show their page live; a workspace spec is the team's own code and is left as written.
+      await writeFile(join(dir, LIVE_HOOK_FILE), LIVE_HOOK);
+      await writeFile(join(dir, 'test.spec.ts'), `import './tb-live';\n${job.code}`);
+    }
+    const stopLive = publishLive({ dir, itemId: job.id, cache });
+    const stderr = await runPlaywright(dir, testEnv(job.data, { ...job.variables, baseUrl: job.base_url }), job.spec_path).finally(stopLive);
     const report = await readFile(join(dir, 'report.json'), 'utf8').then(
       (t) => JSON.parse(t) as PwReport,
       () => null,

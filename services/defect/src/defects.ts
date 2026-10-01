@@ -14,7 +14,7 @@ import { AppError, badRequest, maskRecord, notFound, recordEvent, withTenant, ty
 import { sql } from 'kysely';
 import { projectTarget, type JiraAccounts } from './accounts';
 import { queueAttachments } from './attachments';
-import { bugDescription, commentDoc, JIRA_PRIORITY, type BugContext } from './bug-report';
+import { bugDescription, commentDoc, JIRA_PRIORITY, type BugContext, type AdfDoc } from './bug-report';
 import { JiraError, jqlString, type JiraClient, type JiraIssue } from './jira';
 import { searchTerms, similarity } from './similarity';
 
@@ -546,6 +546,54 @@ export async function logBug(
       await defectRows(trx, projectId).where('d.id', '=', id).executeTakeFirstOrThrow(),
     ])
   )[0]!;
+}
+
+/**
+ * A bug found outside a manual run (an API request, a suite, a monitor): the same Jira issue and
+ * defect row as logBug, without a run item to link. `found` says where it came from in the history.
+ */
+export async function logStandaloneBug(
+  trx: Tx,
+  jira: JiraClient,
+  caller: Caller,
+  projectId: string,
+  body: { summary: string; severity: Severity; labels: string[]; description: AdfDoc; found: string },
+): Promise<DefectRow> {
+  const target = await projectTarget(trx, projectId);
+  const created = await jiraCall(() =>
+    jira.createIssue({
+      projectKey: target.jiraKey,
+      issueType: target.issueType,
+      summary: body.summary,
+      description: body.description,
+      priority: JIRA_PRIORITY[body.severity],
+      labels: ['testbench', ...body.labels],
+    }),
+  );
+  const issue = await jiraCall(() => jira.getIssue(created.key));
+  const { id } = await trx
+    .insertInto('defect.defect')
+    .values({
+      org_id: caller.orgId,
+      project_id: projectId,
+      jira_key: issue.key,
+      jira_id: issue.id,
+      summary: issue.fields.summary,
+      status: issue.fields.status.name,
+      status_category: issue.fields.status.statusCategory.key,
+      severity: body.severity,
+      assignee_name: issue.fields.assignee?.displayName ?? null,
+      fix_version: issue.fields.fixVersions?.[0]?.name ?? null,
+      jira_updated_at: issue.fields.updated,
+      issue_type: issue.fields.issuetype?.name ?? target.issueType,
+      site_url: jira.cfg.baseUrl,
+      created_by: caller.userId,
+    })
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  await addEvent(trx, caller.orgId, id, 'created', `Logged from ${body.found}`, caller.userId);
+  await recordEvent(trx, { type: 'defect.created', orgId: caller.orgId, projectId, actor: caller.userId, data: { defect_id: id, jira_key: issue.key } });
+  return (await withCases(trx, [await defectRows(trx, projectId).where('d.id', '=', id).executeTakeFirstOrThrow()]))[0]!;
 }
 
 /**

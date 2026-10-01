@@ -34,6 +34,20 @@ Built so far:
   a live browser session with an element picker, steps built by action or plain English, generated Playwright code
   in an in-app editor, headless runs with evidence, and a shared page/element library. Plan:
   [docs/testing-studio-plan.md](docs/testing-studio-plan.md).
+- **API Studio**: workspaces of collections, folders and requests sent from the server (SSRF-guarded),
+  environments with encrypted secret variables, auth inherited from folders and collections, no-code checks and
+  extractors, pre/post scripts in a QuickJS sandbox (`pm.*` works, including `pm.sendRequest`), auth profiles that log
+  in once and re-login on a 401 (Bearer, header or cookie session with CSRF), client certificates for mTLS, a
+  per-tester cookie jar, masked send history, Postman and cURL import, Postman export, code snippets in six languages,
+  and a spec library (OpenAPI 3 and Swagger 2, versions with breaking-change diffs, requests made from operations).
+  Quality checks and an enrichment Q&A improve thin specs, and tests are generated as variations to review. A project
+  map infers which API feeds which (testers confirm or reject each link) and suggests workflows; workflows chain
+  requests with poll, if, loop, parallel and teardown steps, drawn as a graph. Suites run with retries, data sets,
+  schedules and monitors, and report as JUnit and HTML. An assistant explains routes and finds the calls for a
+  requirement. Load tests (up to 100 users in-process, k6 export beyond) and OWASP API security checks run only
+  against hosts you verify by DNS record or file, never at a production environment without an admin's override, and
+  are audited. A mock server serves a spec, and WebSocket and SSE requests run from the builder.
+  Plan: [docs/api-testing-plan.md](docs/api-testing-plan.md).
 
 ## Run it locally
 

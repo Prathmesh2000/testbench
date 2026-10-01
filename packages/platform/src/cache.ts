@@ -54,3 +54,6 @@ export class JsonCache {
     await this.redis.quit();
   }
 }
+
+/** Where the runner keeps the latest live frame of a running test item (deploy/runner/src/live.ts). */
+export const liveFrameKey = (itemId: string) => `tb:live:${itemId}`;

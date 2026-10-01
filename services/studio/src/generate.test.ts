@@ -1,4 +1,5 @@
 import type { AutoStep } from '@tb/contracts';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { generateCode, locatorExpr, valueExpr } from './generate';
 import { validateSteps, type ValidationContext } from './validate';
@@ -53,6 +54,31 @@ describe('generateCode', () => {
     expect(code).toContain('await page.getByLabel("Email", { exact: true }).fill((data["email"] ?? \'\'));');
     expect(code).toContain('await expect(page).toHaveURL(contains("/dashboard"));');
     expect(code).not.toMatch(/waitForTimeout|setTimeout/);
+  });
+
+  it('checks cookies, storage and the APIs the page called, and the code it writes runs', () => {
+    const checks = step({
+      id: 'v', action: 'verify', intent: 'Stored and called',
+      assertions: [
+        { kind: 'cookie', key: 'session', soft: false },
+        { kind: 'local_storage', key: 'lastProject', expected: '{data.email}', soft: false },
+        { kind: 'session_storage', key: 'draft', soft: true },
+        { kind: 'api_called', key: 'POST /api/projects/:id', expected: '201', soft: false },
+      ],
+    });
+    const { code } = generateCode({ title: 'Stores', key: 'AT-3', version: 1, steps: [checks] }, lib);
+    expect(code).toContain('await expect.poll(async () => (await page.context().cookies()).find((c) => c.name === "session")?.value ?? null).not.toBeNull();');
+    expect(code).toContain('await expect.poll(() => page.evaluate((k) => localStorage.getItem(k), "lastProject")).toBe((data["email"] ?? \'\'));');
+    expect(code).toContain('await expect.soft.poll(() => page.evaluate((k) => sessionStorage.getItem(k), "draft")).not.toBeNull();');
+    expect(code).toContain('apiCalls.some((c) => calledAs(c, "POST /api/projects/:id") && String(c.status) === String("201"))');
+    const js = ts.transpileModule(code, { reportDiagnostics: true, compilerOptions: { target: ts.ScriptTarget.ES2022 } });
+    expect(js.diagnostics ?? []).toEqual([]);
+    const helper = js.outputText.slice(js.outputText.indexOf('const calledAs'), js.outputText.indexOf('const pick'));
+    const calledAs = new Function(`${helper}; return calledAs;`)() as (c: { method: string; path: string }, want: string) => boolean;
+    expect(calledAs({ method: 'POST', path: '/api/projects/42' }, 'POST /api/projects/:id')).toBe(true);
+    expect(calledAs({ method: 'post', path: '/api/projects/42/' }, 'POST /api/projects/:id')).toBe(true);
+    expect(calledAs({ method: 'POST', path: '/api/projects/42/modules' }, 'POST /api/projects/:id')).toBe(false);
+    expect(calledAs({ method: 'GET', path: '/api/projects/42' }, 'POST /api/projects/:id')).toBe(false);
   });
 
   it('marks tests with a manual step as not runnable unattended', () => {

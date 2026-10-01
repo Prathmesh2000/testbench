@@ -1,4 +1,4 @@
-import { LOCATOR_CORE } from './core';
+import { LOCATOR_CORE } from '@tb/contracts';
 
 // The embedded picker: one line the team adds to their own staging site so it can be opened in the
 // pane beside the editor. Hovering an element there shows its locators in Testbench.
@@ -32,40 +32,6 @@ __CORE__
     return box;
   }
 
-  function describe(el) {
-    var list = candidates(el).map(function (c) {
-      return {
-        strategy: c.strategy,
-        value: c.value,
-        name: c.name,
-        within: c.within ? { strategy: c.within.strategy, value: c.within.value, name: c.within.name, hasText: c.within.hasText } : undefined,
-        nth: c.nth,
-        code: 'page.' + playwrightCode(c),
-        // A scoped locator is counted inside its container, which is the point of scoping it.
-        matches: c.within ? 1 : countMatches(c, null)
-      };
-    });
-    return {
-      tag: el.tagName.toLowerCase(),
-      role: roleOf(el) || null,
-      text: squash(el.textContent).slice(0, 80),
-      xpath: xpathOf(el),
-      suggestedName: suggestName(el, candidates(el)),
-      page: squash(document.title).slice(0, 60) || location.pathname,
-      url: location.href,
-      locators: list
-    };
-  }
-
-  /** The first name worth offering: what the element is called, not what it looks like. */
-  function suggestName(el, list) {
-    var best = list[0];
-    var base = (best && (best.name || (best.strategy !== 'css' ? best.value : ''))) || squash(el.textContent) || el.tagName.toLowerCase();
-    base = base.slice(0, 40).trim();
-    var kind = roleOf(el);
-    return kind && base.toLowerCase().indexOf(kind) === -1 ? base + ' ' + kind : base;
-  }
-
   function send(type, payload) {
     try {
       window.parent.postMessage({ tb: type, payload: payload }, PARENT_ORIGIN);
@@ -88,7 +54,7 @@ __CORE__
     if (!el || el.nodeType !== 1 || el.hasAttribute('data-tb-embed') || el === last) return;
     last = el;
     show(el);
-    send('hover', describe(el));
+    send('hover', describeElement(el));
   }, true);
 
   document.addEventListener('click', function (e) {
@@ -96,7 +62,7 @@ __CORE__
     // While picking, a click means "this one", not "use the site".
     e.preventDefault();
     e.stopPropagation();
-    send('picked', describe(e.target));
+    send('picked', describeElement(e.target));
   }, true);
 
   document.addEventListener('mouseleave', function () {

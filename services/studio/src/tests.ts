@@ -8,7 +8,9 @@ import type {
   StepIssue,
   StudioComponent,
   StudioTest,
+  TestIntent,
 } from '@tb/contracts';
+import { ComponentMeta } from '@tb/contracts';
 import { badRequest, conflict, notFound, recordEvent, type Tx } from '@tb/platform';
 import { saveFile } from './code';
 import type { z } from 'zod';
@@ -111,6 +113,7 @@ async function testView(trx: Tx, projectId: string, testId: string, version?: nu
     secrets: v.secrets,
     steps: v.steps as AutoStep[],
     warnings: v.warnings as StepIssue[],
+    intent: (t.intent as TestIntent | null) ?? null,
     updatedAt: t.updated_at.toISOString(),
   };
 }
@@ -173,6 +176,7 @@ export async function saveTest(
         case_id: body.caseId,
         data_set_id: body.dataSetId,
         owner_id: caller.userId,
+        intent: body.intent ? JSON.stringify(body.intent) : null,
       })
       .returning('id')
       .executeTakeFirstOrThrow();
@@ -185,6 +189,8 @@ export async function saveTest(
         kind: body.kind,
         case_id: body.caseId,
         data_set_id: body.dataSetId,
+        // An ordinary edit sends no intent; it keeps the one the test was built from.
+        ...(body.intent ? { intent: JSON.stringify(body.intent) } : {}),
         status: 'draft',
         current_version: eb('current_version', '+', 1),
         updated_at: new Date(),
@@ -271,7 +277,7 @@ export async function listComponents(trx: Tx, projectId: string): Promise<Studio
     .innerJoin('studio.component_version as v', (j) =>
       j.onRef('v.component_id', '=', 'c.id').onRef('v.version', '=', 'c.current_version'),
     )
-    .select(['c.id', 'c.name', 'c.description', 'c.inputs', 'c.current_version', 'c.updated_at', 'v.steps'])
+    .select(['c.id', 'c.name', 'c.description', 'c.inputs', 'c.current_version', 'c.updated_at', 'c.meta', 'v.steps'])
     .where('c.project_id', '=', projectId)
     .orderBy('c.name')
     .execute();
@@ -282,6 +288,8 @@ export async function listComponents(trx: Tx, projectId: string): Promise<Studio
     inputs: r.inputs,
     version: r.current_version,
     steps: r.steps as AutoStep[],
+    // Rows from before the meta layer hold {}; parsing fills in the defaults.
+    meta: ComponentMeta.parse(r.meta),
     updatedAt: r.updated_at.toISOString(),
   }));
 }
@@ -318,6 +326,7 @@ export async function saveComponent(
         name: body.name,
         description: body.description,
         inputs: body.inputs,
+        meta: JSON.stringify(body.meta),
       })
       .returning('id')
       .executeTakeFirstOrThrow();
@@ -329,6 +338,7 @@ export async function saveComponent(
         name: body.name,
         description: body.description,
         inputs: body.inputs,
+        meta: JSON.stringify(body.meta),
         current_version: eb('current_version', '+', 1),
         updated_at: new Date(),
       }))
@@ -359,6 +369,22 @@ export async function saveComponent(
     data: { component_id: id, version },
   });
   return (await listComponents(trx, projectId)).find((c) => c.id === id)!;
+}
+
+/**
+ * Deletes a test from the list by archiving it: its versions stay, so past runs still show what ran.
+ */
+export async function archiveTest(trx: Tx, caller: Caller, projectId: string, testId: string): Promise<void> {
+  const done = await trx
+    .updateTable('studio.test')
+    .set({ status: 'archived', updated_at: new Date() })
+    .where('id', '=', testId)
+    .where('project_id', '=', projectId)
+    .where('status', '!=', 'archived')
+    .returning('id')
+    .executeTakeFirst();
+  if (!done) throw notFound('Test');
+  await recordEvent(trx, { type: 'studio.test.archived', orgId: caller.orgId, projectId, actor: caller.userId, data: { test_id: testId } });
 }
 
 /**

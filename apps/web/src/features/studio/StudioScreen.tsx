@@ -5,6 +5,7 @@ import {
   CHANGING_ACTIONS,
   LOCATOR_STRATEGIES,
   PAGE_ASSERTIONS,
+  BROWSER_ASSERTIONS,
   STEP_ACTIONS,
   type Assertion,
   type AssertionKind,
@@ -13,38 +14,60 @@ import {
   type AutoStep,
   type DataSetSummary,
   type GeneratedCode,
+  type LiveFrame,
   type Locator,
   type LocatorStrategy,
   type PageElement,
   type PickerSession,
   type StepIssue,
+  type StudioComponent,
   type StudioTest,
 } from '@tb/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/Icon';
+import { ResultStatus } from '@/components/status';
 import { useSession, useToast } from '@/components/providers';
 import { api, ApiError, get } from '@/lib/api';
 import { ago, bytes, dateTimeIST, fmt } from '@/lib/format';
 import { Ide } from './ide/Ide';
+import { UiReview } from './ui/UiReview';
+import { WorkflowsScreen } from './workflows/WorkflowsScreen';
+import { JourneyBuilder } from './journeys/JourneyBuilder';
+import { SiteMap } from './sitemap/SiteMap';
 import s from './studio.module.css';
 
-type Tab = 'tests' | 'code' | 'runs' | 'elements';
+type Tab = 'sitemap' | 'workflows' | 'tests' | 'code' | 'runs' | 'elements' | 'ui';
+/** The testing flow first (map the site, record workflows, make tests, run them), then the tools. */
+const TAB_GROUPS: Array<Array<{ id: Tab; label: string; hint: string }>> = [
+  [
+    { id: 'sitemap', label: 'Site map', hint: 'Pages, the workflows between them, their APIs and validations' },
+    { id: 'workflows', label: 'Workflows', hint: 'Record what users do once, then agree how to test it' },
+    { id: 'tests', label: 'Tests', hint: 'Journeys of workflows, and tests built step by step' },
+    { id: 'runs', label: 'Runs', hint: 'Results, evidence and live runs' },
+  ],
+  [
+    { id: 'code', label: 'Code', hint: 'Playwright code, with the site beside it' },
+    { id: 'elements', label: 'Page library', hint: 'Saved elements and their locators' },
+    { id: 'ui', label: 'UI review', hint: 'Layout and accessibility review of a page' },
+  ],
+];
 interface TestRow { id: string; key: string; title: string; status: string; version: number; updatedAt: string }
 
 const ACTION_LABEL: Record<AutoStep['action'], string> = {
   open: 'Open page', click: 'Click', type: 'Type', select: 'Choose option', check: 'Tick', uncheck: 'Untick',
-  hover: 'Hover', press: 'Press key', verify: 'Check only', use_component: 'Use component', api_request: 'API request', manual: 'Manual step',
+  hover: 'Hover', press: 'Press key', store: 'Store value', verify: 'Check only', use_component: 'Use component', api_request: 'API request', manual: 'Manual step',
 };
 const ASSERT_LABEL: Record<AssertionKind, string> = {
   visible: 'is visible', hidden: 'is hidden', enabled: 'is enabled', disabled: 'is disabled', checked: 'is ticked',
   text_equals: 'text is', text_contains: 'text contains', value_equals: 'value is', count_equals: 'count is',
-  url_contains: 'page URL contains', title_contains: 'page title contains', status_equals: 'response status is',
+  url_contains: 'page URL contains', title_contains: 'page title contains', status_equals: 'response status is', validation_message: 'field is refused with',
+  cookie: 'cookie is set', local_storage: 'local storage has', session_storage: 'session storage has', api_called: 'page called the API',
 };
 const NEEDS_EXPECTED: AssertionKind[] = ['text_equals', 'text_contains', 'value_equals', 'count_equals', 'url_contains', 'title_contains', 'status_equals'];
-const NEEDS_TARGET: AutoStep['action'][] = ['click', 'type', 'select', 'check', 'uncheck', 'hover', 'verify'];
-const NEEDS_VALUE: AutoStep['action'][] = ['open', 'type', 'select', 'press', 'manual'];
+const NEEDS_TARGET: AutoStep['action'][] = ['click', 'type', 'select', 'check', 'uncheck', 'hover', 'store', 'verify'];
+const NEEDS_VALUE: AutoStep['action'][] = ['open', 'type', 'select', 'press', 'store', 'manual'];
 
 const newId = () => `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 const blankStep = (action: AutoStep['action'] = 'click'): AutoStep => ({ id: newId(), action, assertions: [], noCheck: false, intent: '' });
@@ -57,25 +80,33 @@ export function StudioScreen() {
   const go = (t: Tab, id?: string) => router.replace(`/automation?tab=${t}${id ? `&id=${encodeURIComponent(id)}` : ''}`);
   const tabs = (
     <div className={s.tabs} role="tablist">
-      {(['tests', 'code', 'runs', 'elements'] as Tab[]).map((t) => (
-        <button key={t} role="tab" aria-selected={tab === t} className={`chip ${tab === t ? 'on' : ''}`} onClick={() => go(t)}>
-          {t === 'tests' ? 'Tests' : t === 'code' ? 'Code' : t === 'runs' ? 'Runs' : 'Page library'}
-        </button>
+      {TAB_GROUPS.map((group, g) => (
+        <div key={g} className={s.tabGroup}>
+          {group.map((t) => (
+            <button key={t.id} role="tab" aria-selected={tab === t.id} title={t.hint} className={`chip ${tab === t.id ? 'on' : ''}`} onClick={() => go(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
       ))}
     </div>
   );
   // The code workspace is a full IDE: explorer, editor and run panel take the whole screen.
   if (tab === 'code') return <Ide header={tabs} initial={params.get('id')} />;
+  if (tab === 'workflows') return <WorkflowsScreen header={tabs} />;
+  if (tab === 'sitemap') return <SiteMap header={tabs} />;
+  if (tab === 'ui') return <UiReview header={tabs} />;
   return (
     <div className={s.layout}>
       <aside className={s.list}>
         {tabs}
-        {tab === 'tests' && <TestList selected={params.get('id')} onSelect={(id) => go('tests', id)} />}
+        {tab === 'tests' && <TestList selected={params.get('id')} onSelect={(id) => go('tests', id)} onJourney={() => router.replace('/automation?tab=tests&journey=new')} />}
         {tab === 'runs' && <RunList selected={params.get('id')} onSelect={(id) => go('runs', id)} />}
         {tab === 'elements' && <ElementList />}
       </aside>
       <section className={s.main}>
-        {tab === 'tests' && <TestEditor key={params.get('id') ?? 'new'} testId={params.get('id')} onSaved={(id) => go('tests', id)} onRun={(id) => go('runs', id)} onEjected={(path) => go('code', path)} />}
+        {tab === 'tests' && params.get('journey') && <JourneyBuilder start={params.get('journey') === 'new' ? null : params.get('journey')} onDone={(id) => go('tests', id)} />}
+        {tab === 'tests' && !params.get('journey') && <TestEditor key={params.get('id') ?? 'new'} testId={params.get('id')} onSaved={(id) => go('tests', id)} onRun={(id) => go('runs', id)} onEjected={(path) => go('code', path)} onDeleted={() => go('tests')} />}
         {tab === 'runs' && (params.get('id') ? <RunDetail runId={params.get('id')!} /> : <div className="empty t3" style={{ flex: 1 }}>Pick a run on the left.</div>)}
         {tab === 'elements' && <ElementForm />}
       </section>
@@ -85,12 +116,12 @@ export function StudioScreen() {
 
 // ---------- tests ----------
 
-function TestList({ selected, onSelect }: { selected: string | null; onSelect(id: string | undefined): void }) {
+function TestList({ selected, onSelect, onJourney }: { selected: string | null; onSelect(id: string | undefined): void; onJourney(): void }) {
   const { project } = useSession();
   const tests = useQuery({ queryKey: ['studio-tests', project.id], queryFn: () => get<TestRow[]>(`/projects/${project.id}/studio/tests`) });
   return (
     <>
-      <div className="hdr"><h3>Automated tests</h3>{tests.data && <span className="cnt">{tests.data.length}</span>}<div className="f1" /><button className="btn sm" onClick={() => onSelect(undefined)}><Icon name="plus" size={12} />New</button></div>
+      <div className="hdr"><h3>Automated tests</h3>{tests.data && <span className="cnt">{tests.data.length}</span>}<div className="f1" /><button className="btn sm primary" onClick={onJourney} title="Workflows in order, as a test case"><Icon name="plus" size={12} />Journey</button><button className="btn sm" onClick={() => onSelect(undefined)} title="A test built step by step"><Icon name="plus" size={12} />Steps</button></div>
       <div className={s.scroll}>
         {tests.data?.map((t) => (
           <button key={t.id} className={`${s.item} ${selected === t.id ? s.on : ''}`} onClick={() => onSelect(t.id)}>
@@ -105,13 +136,21 @@ function TestList({ selected, onSelect }: { selected: string | null; onSelect(id
   );
 }
 
-function TestEditor({ testId, onSaved, onRun, onEjected }: { testId: string | null; onSaved(id: string): void; onRun(runId: string): void; onEjected(path: string): void }) {
+function TestEditor({ testId, onSaved, onRun, onEjected, onDeleted }: { testId: string | null; onSaved(id: string): void; onRun(runId: string): void; onEjected(path: string): void; onDeleted(): void }) {
   const { project, can } = useSession();
   const { notify } = useToast();
   const queryClient = useQueryClient();
   const existing = useQuery({ queryKey: ['studio-test', testId], queryFn: () => get<StudioTest>(`/projects/${project.id}/studio/tests/${testId}`), enabled: !!testId });
   const elements = useQuery({ queryKey: ['studio-elements', project.id], queryFn: () => get<PageElement[]>(`/projects/${project.id}/studio/elements`) });
   const dataSets = useQuery({ queryKey: ['data-sets', project.id], queryFn: () => get<DataSetSummary[]>(`/projects/${project.id}/data-sets`) });
+  const components = useQuery({ queryKey: ['studio-components', project.id], queryFn: () => get<StudioComponent[]>(`/projects/${project.id}/studio/components`) });
+  // This test's runs, newest first; refreshed while one is still going.
+  const runs = useQuery({
+    queryKey: ['studio-runs', project.id, testId],
+    queryFn: () => get<AutoRun[]>(`/projects/${project.id}/studio/runs?testId=${testId}`),
+    enabled: !!testId,
+    refetchInterval: (q) => (q.state.data?.some((r) => r.status === 'queued' || r.status === 'running') ? 3_000 : false),
+  });
   const [title, setTitle] = useState('');
   const [dataSetId, setDataSetId] = useState<string | null>(null);
   const [secrets, setSecrets] = useState('');
@@ -168,11 +207,29 @@ function TestEditor({ testId, onSaved, onRun, onEjected }: { testId: string | nu
   const run = async () => {
     if (!testId || !runUrl) return;
     try {
+      localStorage.setItem(RUN_URL, runUrl);
+    } catch {
+      // Private browsing: the address just isn't remembered.
+    }
+    try {
       const started = await api<AutoRun>('POST', `/projects/${project.id}/studio/runs`, { name: title || 'Test run', testIds: [testId], baseUrl: runUrl });
       await queryClient.invalidateQueries({ queryKey: ['studio-runs', project.id] });
       onRun(started.id);
     } catch (err) {
       notify(err instanceof ApiError ? err.message : 'Could not start the run', 'bad');
+    }
+  };
+
+  const remove = async () => {
+    if (!testId || !existing.data) return;
+    if (!confirm(`Delete ${existing.data.key} "${existing.data.title}"? Past runs keep their results.`)) return;
+    try {
+      await api('DELETE', `/projects/${project.id}/studio/tests/${testId}`);
+      await queryClient.invalidateQueries({ queryKey: ['studio-tests', project.id] });
+      notify(`${existing.data.key} deleted`);
+      onDeleted();
+    } catch (err) {
+      notify(err instanceof ApiError ? err.message : 'Could not delete the test', 'bad');
     }
   };
 
@@ -199,7 +256,8 @@ function TestEditor({ testId, onSaved, onRun, onEjected }: { testId: string | nu
         <input className="inp f1" style={{ minWidth: 220, fontSize: 15, fontWeight: 600 }} placeholder="What this test proves, e.g. Customer can pay with a saved card" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Test title" disabled={!editable} />
         {testId && <button className="btn" onClick={showCode}>{code ? 'Hide code' : 'View code'}</button>}
         {testId && editable && existing.data?.status !== 'archived' && <button className="btn" onClick={eject} title="One way: the test becomes a spec file you edit as code">Convert to code</button>}
-        {testId && can('run.create') && <button className="btn" onClick={() => setRunUrl(runUrl === null ? 'https://' : null)}><Icon name="play" size={12} />Run</button>}
+        {testId && can('run.create') && <button className="btn" onClick={() => setRunUrl(runUrl === null ? lastRunUrl() : null)}><Icon name="play" size={12} />Run</button>}
+        {testId && editable && existing.data?.status !== 'archived' && <button className="btn" onClick={remove} title="Removes it from the list; past runs keep their results">Delete</button>}
         {editable && <button className="btn primary" onClick={save} disabled={saving || title.trim().length < 3}>{saving ? 'Checking…' : 'Save'}</button>}
       </div>
       <div className={s.body}>
@@ -229,11 +287,46 @@ function TestEditor({ testId, onSaved, onRun, onEjected }: { testId: string | nu
         </div>
         {testIssues.map((i, n) => <div key={n} className={i.severity === 'error' ? 'err' : 't3'} style={{ fontSize: 12 }}><Icon name="alert" size={12} /> {i.message}</div>)}
 
-        {steps.map((st, i) => (
-          <StepEditor key={st.id} step={st} index={i} elements={elements.data ?? []} issues={issues.filter((x) => x.stepIndex === i)} editable={editable}
-            onChange={(patch) => edit(i, patch)} onMove={(d) => move(i, d)} onRemove={() => setSteps((all) => all.filter((_, n) => n !== i))} />
-        ))}
+        {existing.data?.intent && (
+          <div className={s.intent}>
+            <div><b>Intent</b> {existing.data.intent.intent}</div>
+            <div><b>Goal</b> {existing.data.intent.goal}</div>
+            {existing.data.intent.prerequisites && <div><b>Prerequisites</b> {existing.data.intent.prerequisites}</div>}
+          </div>
+        )}
+        {steps.map((st, i) =>
+          st.action === 'use_component' ? (
+            <SegmentStep key={st.id} step={st} index={i} components={components.data ?? []} issues={issues.filter((x) => x.stepIndex === i)} editable={editable}
+              onChange={(patch) => edit(i, patch)} onMove={(d) => move(i, d)} onRemove={() => setSteps((all) => all.filter((_, n) => n !== i))} />
+          ) : (
+            <StepEditor key={st.id} step={st} index={i} elements={elements.data ?? []} issues={issues.filter((x) => x.stepIndex === i)} editable={editable}
+              onChange={(patch) => edit(i, patch)} onMove={(d) => move(i, d)} onRemove={() => setSteps((all) => all.filter((_, n) => n !== i))} />
+          ),
+        )}
         {editable && <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => setSteps((all) => [...all, blankStep()])}><Icon name="plus" size={12} />Add step</button>}
+        {testId && (
+          <section className="col" style={{ gap: 6 }}>
+            <b style={{ fontSize: 13 }}>Runs of this test</b>
+            {runs.isLoading ? (
+              <span className="t3" style={{ fontSize: 12 }}>Loading…</span>
+            ) : !runs.data?.length ? (
+              <span className="t3" style={{ fontSize: 12 }}>Not run yet. Press Run, give the address of the site to test, then Start headless run.</span>
+            ) : (
+              <div className={s.testRuns}>
+                {runs.data.slice(0, 10).map((r) => (
+                  <button key={r.id} className={s.testRun} onClick={() => onRun(r.id)} title="Open the run: each data row, its steps, screenshots and trace">
+                    <span className="mono">{r.key}</span>
+                    {r.status === 'done' ? <ResultStatus result={r.counts.failed + r.counts.error > 0 ? 'failed' : 'passed'} size={12} /> : <span className="pill" style={{ height: 18, fontSize: 10.5 }}>{r.status}</span>}
+                    <span className="t3">{r.counts.passed}/{r.counts.total} passed{r.counts.failed ? ` · ${r.counts.failed} failed` : ''}{r.counts.flaky ? ` · ${r.counts.flaky} flaky` : ''}</span>
+                    <span className="t3 trunc f1">{r.baseUrl}</span>
+                    <span className="t3">{ago(r.createdAt)}</span>
+                    <Icon name="chevRight" size={11} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
         {code && (
           <div className="col" style={{ gap: 6 }}>
             <span className="t3" style={{ fontSize: 12 }}>{code.runnable ? 'Generated Playwright code (what the runner executes):' : 'Has a manual step: unattended runs skip this test.'}</span>
@@ -242,6 +335,63 @@ function TestEditor({ testId, onSaved, onRun, onEjected }: { testId: string | nu
         )}
       </div>
     </>
+  );
+}
+
+const RUN_URL = 'tb.studio.runUrl';
+/** The last address a test was run against, so the next run starts from it. */
+function lastRunUrl(): string {
+  try {
+    return localStorage.getItem(RUN_URL) || 'https://';
+  } catch {
+    return 'https://';
+  }
+}
+
+/**
+ * A step that runs a saved segment (component). Shown as the segment it is, with its inputs, rather
+ * than as an ordinary step: its own steps are edited on the segment, where every test using it shares them.
+ */
+function SegmentStep({ step, index, components, issues, editable, onChange, onMove, onRemove }: {
+  step: AutoStep; index: number; components: StudioComponent[]; issues: StepIssue[]; editable: boolean;
+  onChange(patch: Partial<AutoStep>): void; onMove(d: -1 | 1): void; onRemove(): void;
+}) {
+  const use = step.component;
+  const comp = use && components.find((c) => c.id === use.id);
+  const setInput = (k: string, v: string) => use && onChange({ component: { ...use, inputs: { ...use.inputs, [k]: v } } });
+  return (
+    <div className={`${s.step} ${issues.some((i) => i.severity === 'error') ? s.bad : ''}`}>
+      <div className={s.stepRow}>
+        <span className={s.no}>{index + 1}</span>
+        <div className="col f1" style={{ gap: 2 }}>
+          <span><span className="t3">Uses segment</span> <b>{comp?.name ?? 'Unknown segment'}</b> <span className="t3">v{use?.version}{comp && comp.version !== use?.version ? ` (v${comp.version} is newer)` : ''}</span></span>
+          {comp && (comp.meta.purpose || comp.meta.leaves) && (
+            <span className="t3" style={{ fontSize: 12 }}>
+              {comp.meta.purpose}
+              {comp.meta.leaves ? `${comp.meta.purpose ? ' · ' : ''}leaves: ${comp.meta.leaves}` : ''} · {comp.steps.length} steps
+            </span>
+          )}
+        </div>
+        {editable && (
+          <span className="row" style={{ gap: 2 }}>
+            <button className="ib sm" aria-label="Move up" onClick={() => onMove(-1)}><Icon name="back" size={12} /></button>
+            <button className="ib sm" aria-label="Move down" onClick={() => onMove(1)}><Icon name="forward" size={12} /></button>
+            <button className="ib sm" aria-label="Remove step" onClick={onRemove}><Icon name="x" size={12} /></button>
+          </span>
+        )}
+      </div>
+      {use && Object.keys(use.inputs).length > 0 && (
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap', paddingLeft: 30 }}>
+          {Object.entries(use.inputs).map(([k, v]) => (
+            <div key={k} className="field">
+              <label htmlFor={`in-${step.id}-${k}`}>{k}{comp?.meta.inputKinds[k] ? <span className="t3" style={{ fontWeight: 400 }}> · {comp.meta.inputKinds[k]}</span> : null}</label>
+              <input id={`in-${step.id}-${k}`} className="inp mono" value={v} onChange={(e) => setInput(k, e.target.value)} disabled={!editable} />
+            </div>
+          ))}
+        </div>
+      )}
+      {issues.map((i, n) => <div key={n} className={i.severity === 'error' ? 'err' : 't3'} style={{ fontSize: 12, paddingLeft: 30 }}><Icon name="alert" size={12} /> {i.message}</div>)}
+    </div>
   );
 }
 
@@ -312,11 +462,17 @@ function StepEditor({ step, index, elements, issues, editable, onChange, onMove,
       {step.assertions.map((a, n) => (
         <div key={n} className={s.assert}>
           <Icon name="check" size={12} />
-          <span className="t3">{PAGE_ASSERTIONS.includes(a.kind) ? 'Then' : 'Then the element'}</span>
+          <span className="t3">{PAGE_ASSERTIONS.includes(a.kind) || BROWSER_ASSERTIONS.includes(a.kind) ? 'Then' : 'Then the element'}</span>
           <select className="inp" style={{ height: 26 }} value={a.kind} onChange={(e) => setAssertion(n, { kind: e.target.value as AssertionKind })} disabled={!editable} aria-label="Check">
             {ASSERTIONS.filter((k) => k !== 'status_equals').map((k) => <option key={k} value={k}>{ASSERT_LABEL[k]}</option>)}
           </select>
           {NEEDS_EXPECTED.includes(a.kind) && <input className="inp mono" style={{ height: 26 }} value={a.expected ?? ''} onChange={(e) => setAssertion(n, { expected: e.target.value })} aria-label="Expected" disabled={!editable} />}
+          {BROWSER_ASSERTIONS.includes(a.kind) && (
+            <>
+              <input className="inp mono" style={{ height: 26 }} value={a.key ?? ''} placeholder={a.kind === 'api_called' ? 'POST /api/projects' : 'key'} onChange={(e) => setAssertion(n, { key: e.target.value })} aria-label={a.kind === 'api_called' ? 'Method and path' : 'Key'} disabled={!editable} />
+              <input className="inp mono" style={{ height: 26 }} value={a.expected ?? ''} placeholder={a.kind === 'api_called' ? 'status (optional)' : 'value (optional)'} onChange={(e) => setAssertion(n, { expected: e.target.value || undefined })} aria-label={a.kind === 'api_called' ? 'Status' : 'Value'} disabled={!editable} />
+            </>
+          )}
           <label className="row t3" style={{ gap: 4 }}><input type="checkbox" className="cb" checked={a.soft} onChange={(e) => setAssertion(n, { soft: e.target.checked })} disabled={!editable} />keep going if it fails</label>
           {editable && <button className="ib sm" aria-label="Remove check" onClick={() => onChange({ assertions: step.assertions.filter((_, k) => k !== n) })}><Icon name="x" size={11} /></button>}
         </div>
@@ -353,6 +509,47 @@ function RunList({ selected, onSelect }: { selected: string | null; onSelect(id:
         {runs.data?.length === 0 && <div className="empty t3" style={{ padding: 24, fontSize: 12.5 }}>No runs yet. Open a test and press Run.</div>}
       </div>
     </>
+  );
+}
+
+/** An address as a person reads it: masked values show as ••••, not %E2%80%A2. */
+function readableUrl(url: string): string {
+  try {
+    return decodeURI(url);
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * A running test as it happens: its page a few times a second and the step it is on. There is no
+ * frame before the browser opens or for a code spec (which shows its step only); once the test
+ * ends, its screenshots, video and trace below take over.
+ */
+function LiveView({ runId, itemId }: { runId: string; itemId: string }) {
+  const { project } = useSession();
+  const live = useQuery({
+    queryKey: ['studio-live', itemId],
+    queryFn: async () => (await api<LiveFrame | undefined>('GET', `/projects/${project.id}/studio/runs/${runId}/items/${itemId}/live`)) ?? null,
+    refetchInterval: 500,
+    // Keep the last frame on screen between polls instead of flashing empty.
+    placeholderData: (prev) => prev,
+  });
+  const f = live.data;
+  return (
+    <div className={s.live} aria-live="polite">
+      <div className="row" style={{ gap: 8 }}>
+        <span className={s.liveDot} aria-hidden />
+        <b style={{ fontSize: 12 }}>Live</b>
+        <span className="trunc f1 t3" style={{ fontSize: 12 }}>{f?.step ?? 'Starting the browser…'}</span>
+        {f?.url && <span className="trunc t3 mono" style={{ fontSize: 11, maxWidth: '40%' }} title={readableUrl(f.url)}>{readableUrl(f.url)}</span>}
+      </div>
+      {f?.frame ? (
+        <img src={`data:image/jpeg;base64,${f.frame}`} alt={`What the test sees now${f.step ? `: ${f.step}` : ''}`} className={s.liveFrame} />
+      ) : (
+        <div className={`${s.liveFrame} ${s.liveEmpty}`}>{f ? 'This is a code spec: its steps show here, its page does not.' : 'Waiting for the first picture…'}</div>
+      )}
+    </div>
   );
 }
 
@@ -397,6 +594,7 @@ function RunDetail({ runId }: { runId: string }) {
               {i.durationMs !== null && <span className="t3">{(i.durationMs / 1000).toFixed(1)} s</span>}
               {i.attempt > 1 && <span className="t3">attempt {i.attempt}</span>}
             </div>
+            {i.status === 'running' && <LiveView runId={runId} itemId={i.id} />}
             {i.steps.map((st, n) => (
               <div key={n} className={s.stepResult}>
                 <Icon name={st.status === 'passed' ? 'check' : 'x'} size={12} />

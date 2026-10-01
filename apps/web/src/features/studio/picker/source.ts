@@ -4,9 +4,9 @@
 // nothing about the page leaves the browser otherwise.
 //
 // Written as a string, not a module, because it is delivered to another origin as plain JavaScript.
-// The locator ranking itself lives in core.ts and is shared with the embedded picker.
+// The locator ranking itself lives in @tb/contracts (locator-core.ts) and is shared with the embedded picker.
 
-import { LOCATOR_CORE } from './core';
+import { LOCATOR_CORE } from '@tb/contracts';
 
 export const PICKER_SOURCE = String.raw`
 (function () {

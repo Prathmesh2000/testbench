@@ -7,7 +7,8 @@ import type { Severity, Step } from '@tb/contracts';
 export type AdfNode =
   | { type: 'paragraph'; content: AdfInline[] }
   | { type: 'heading'; attrs: { level: number }; content: AdfInline[] }
-  | { type: 'orderedList' | 'bulletList'; content: { type: 'listItem'; content: AdfNode[] }[] };
+  | { type: 'orderedList' | 'bulletList'; content: { type: 'listItem'; content: AdfNode[] }[] }
+  | { type: 'codeBlock'; attrs: { language: string }; content: { type: 'text'; text: string }[] };
 type AdfInline = { type: 'text'; text: string; marks?: { type: 'strong' | 'code' }[] };
 export interface AdfDoc {
   type: 'doc';

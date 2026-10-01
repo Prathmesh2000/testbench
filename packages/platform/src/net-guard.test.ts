@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isBlockedHost, isPrivateAddress } from './net-guard';
+import { guardedLookup, isBlockedHost, isPrivateAddress } from './net-guard';
 
 describe('isPrivateAddress', () => {
   it('blocks loopback, private, link-local and metadata addresses', () => {
@@ -16,5 +16,24 @@ describe('isPrivateAddress', () => {
     expect(await isBlockedHost('localhost')).toBe(true);
     expect(await isBlockedHost('metadata.google.internal')).toBe(true);
     expect(await isBlockedHost('[::1]')).toBe(true);
+  });
+});
+
+describe('guardedLookup', () => {
+  const resolve = (allowPrivate: boolean, host: string) =>
+    new Promise<{ err: NodeJS.ErrnoException | null; address: unknown }>((done) =>
+      guardedLookup(allowPrivate)(host, {}, (err, address) => done({ err, address })),
+    );
+
+  it('refuses a host that resolves to a private address', async () => {
+    const { err } = await resolve(false, '127.0.0.1');
+    expect(err?.code).toBe('EBLOCKED');
+    expect((await resolve(false, 'localhost')).err?.code).toBe('EBLOCKED');
+  });
+
+  it('lets private addresses through when local development allows them', async () => {
+    const { err, address } = await resolve(true, '127.0.0.1');
+    expect(err).toBeNull();
+    expect(address).toBe('127.0.0.1');
   });
 });

@@ -15,6 +15,7 @@ import { generateText, NoObjectGeneratedError, Output } from 'ai';
 import { sql } from 'kysely';
 import { defaultTaskConfig, monthStart, resolveChain, type AiSettings, type CloudProvider } from './chain';
 import { decryptKey, encryptKey, keyHint } from './keys';
+import { extractJson, schemaInstruction } from './json-answer';
 import { languageModel, recordedModel } from './providers';
 import { TASKS, type TaskInputs, type TaskOutputs } from './tasks';
 
@@ -122,7 +123,8 @@ export class AiService {
         const res = await generateText({
           model,
           system: def.system,
-          prompt: def.prompt(input),
+          // Ollama's cloud models ignore the response format; shown the schema, they follow it.
+          prompt: ref.provider === 'local' ? `${def.prompt(input)}\n\n${schemaInstruction(def.schema)}` : def.prompt(input),
           output: Output.object({ schema: def.schema }),
           maxRetries: 1,
           abortSignal: AbortSignal.timeout(ref.provider === 'local' ? TIMEOUT_MS.local : TIMEOUT_MS.cloud),
@@ -132,6 +134,15 @@ export class AiService {
         await this.meter(caller, task, ref, res.totalUsage, null);
         return { output: res.output as TaskOutputs[K] };
       } catch (err) {
+        // A right answer in the wrong wrapping (a code fence, a sentence around it) is still right,
+        // once the task's own schema has checked it.
+        if (NoObjectGeneratedError.isInstance(err) && err.text) {
+          const found = def.schema.safeParse(extractJson(err.text));
+          if (found.success) {
+            await this.meter(caller, task, ref, err.usage, null);
+            return { output: found.data };
+          }
+        }
         const message = err instanceof Error ? err.message.slice(0, 500) : String(err);
         const usage = NoObjectGeneratedError.isInstance(err) ? err.usage : undefined;
         await this.meter(caller, task, ref, usage, message);

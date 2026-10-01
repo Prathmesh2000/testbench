@@ -120,6 +120,24 @@ export function summarise(type: string, d: Data): Summary {
       return { action: 'Meeting scheduled', entity: str(d.title), details: str(d.starts_at) };
     case 'action_item.converted':
       return { action: 'Action item converted', entity: str(d.converted_to), details: str(d.text) };
+    case 'apitest.suite.finished':
+      return { action: 'API suite finished', entity: str(d.suiteName), details: `${str(d.status)} · ${str(d.trigger)} run` };
+    case 'apitest.monitor.failed':
+      return { action: 'API monitor failed', entity: str(d.suiteName), details: str(d.reason) };
+    case 'apitest.spec.versioned':
+      return { action: 'API spec updated', entity: str(d.specId).slice(0, 8), details: `version ${str(d.version)}` };
+    case 'apitest.security.run':
+      return { action: 'API security checks run', entity: str(d.host), details: `${list(d.checks)}${d.override ? ' · production override' : ''}` };
+    case 'apitest.load.run':
+      return { action: 'API load test run', entity: str(d.host), details: `${str(d.profile)} · up to ${str(d.vus)} users${d.override ? ' · production override' : ''}` };
+    case 'apitest.target.verified':
+      return { action: 'API target verified', entity: str(d.host), details: str(d.method) };
+    case 'studio.test.saved':
+      return { action: 'Automated test saved', entity: str(d.test_id).slice(0, 8), details: `version ${str(d.version)}${Number(d.warnings) ? ` · ${str(d.warnings)} warnings` : ''}` };
+    case 'studio.test.archived':
+      return { action: 'Automated test deleted', entity: str(d.test_id).slice(0, 8), details: '' };
+    case 'studio.component.versioned':
+      return { action: 'Workflow or segment saved', entity: str(d.component_id).slice(0, 8), details: `version ${str(d.version)}` };
     default:
       return { action: type, entity: '', details: '' };
   }

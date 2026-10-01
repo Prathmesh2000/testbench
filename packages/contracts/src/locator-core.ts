@@ -1,7 +1,7 @@
 // The locator engine: reads a page's own DOM and ranks the ways Playwright can find an element,
-// exactly as the generator and page library expect them. Shared by both pickers (the bookmarklet the
-// tester runs on their site, and the embed script that reports locators to the pane beside the
-// editor), so a locator never differs depending on how it was picked.
+// exactly as the generator and page library expect them. Shared by every picker (the bookmarklet the
+// tester runs on their site, the embed script in a framed staging site, and the Test Browser, which
+// injects it into any page), so a locator never differs depending on how it was picked.
 //
 // Written as a string, not a module, because it is delivered to another origin as plain JavaScript.
 // Plain ES2017 without template literals, so it needs no build step and no escaping here.
@@ -44,12 +44,23 @@ export const LOCATOR_CORE = String.raw`
       if (parts.length) return parts.join(' ');
     }
     if (el.id) {
-      var forLabel = document.querySelector('label[for="' + cssEscape(el.id) + '"]');
+      var forLabel = document.querySelector('label[for="' + attrValue(el.id) + '"]');
       if (forLabel) return squash(forLabel.textContent);
     }
+    // A label that wraps its field: its own words only, not a select's options or a textarea's text.
     var wrapping = el.closest('label');
-    if (wrapping) return squash(wrapping.textContent);
+    if (wrapping) return squash(textOutside(wrapping, el));
     return '';
+  }
+
+  /** The text of a node, leaving out one element inside it. */
+  function textOutside(node, skip) {
+    var out = '';
+    for (var c = node.firstChild; c; c = c.nextSibling) {
+      if (c === skip) continue;
+      out += c.nodeType === 3 ? c.nodeValue : c.nodeType === 1 ? textOutside(c, skip) : '';
+    }
+    return out;
   }
 
   function accessibleName(el) {
@@ -65,8 +76,30 @@ export const LOCATOR_CORE = String.raw`
     return title;
   }
 
+  /** A value inside a quoted CSS attribute selector: only quotes and backslashes need escaping. */
+  function attrValue(v) { return String(v).replace(/["\\]/g, '\\$&'); }
+
   function cssEscape(v) {
     return window.CSS && CSS.escape ? CSS.escape(v) : String(v).replace(/["\\]/g, '\\$&');
+  }
+
+  // ---------- stability: a locator must not depend on the data the page happens to show ----------
+
+  // Counts, prices, dates and times change between runs; so does anything long enough to be content.
+  var VOLATILE = /\d{2,}|[₹$€£¥]|\d\s?%|\b(today|yesterday|tomorrow|ago|am|pm)\b|\d{1,2}[\/.:-]\d{1,2}|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d/i;
+  function looksVolatile(s) { return !!s && (s.length > 50 || VOLATILE.test(s)); }
+
+  // Framework-generated ids (React's :r1:, ember123, hashed suffixes) differ between builds or renders.
+  var GENERATED_ID = /^[:_\d]|:|\d{3,}|[a-f0-9]{8,}|^(ember|react|mui|radix|headlessui|rc[-_]|ng-|mat-|cdk-|select2-)|[-_](?=[a-z0-9]*\d)(?=[a-z0-9]*[a-z])[a-z0-9]{5,}$/i;
+  function stableId(id) { return !!id && !GENERATED_ID.test(id); }
+
+  /** Whether a candidate still finds the element when the page shows different data. */
+  function isStable(c) {
+    if (c.nth !== undefined) return false; // position in a list is the data's order
+    if (c.within && looksVolatile(c.within.hasText)) return false;
+    if (c.strategy === 'role') return !looksVolatile(c.name);
+    if (c.strategy === 'text' || c.strategy === 'label' || c.strategy === 'placeholder') return !looksVolatile(c.value);
+    return true;
   }
 
   // ---------- candidate locators, best first ----------
@@ -135,15 +168,32 @@ export const LOCATOR_CORE = String.raw`
     }
     var role = roleOf(el);
     var name = accessibleName(el);
-    if (role && name) out.push({ strategy: 'role', value: role, name: name });
+    // Names and labels past the contract's limits would be cut, and a cut name no longer matches exactly.
+    if (role && name && name.length <= 200) out.push({ strategy: 'role', value: role, name: name });
     var lbl = labelOf(el);
     var isField = /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
-    if (isField && lbl) out.push({ strategy: 'label', value: lbl });
-    var ph = el.getAttribute('placeholder');
-    if (ph) out.push({ strategy: 'placeholder', value: squash(ph) });
+    // Playwright reads a wrapping label's whole text, a select's options and a textarea's text with it;
+    // then only the role and name (combobox "Priority") find the field reliably, so no label locator.
+    var wrapped = !el.getAttribute('aria-label') && !el.getAttribute('aria-labelledby') && el.closest('label');
+    var labelMatches = !wrapped || squash(wrapped.textContent) === lbl;
+    if (isField && lbl && labelMatches && lbl.length <= 500) out.push({ strategy: 'label', value: lbl });
+    var ph = squash(el.getAttribute('placeholder'));
+    if (ph && ph.length <= 500) out.push({ strategy: 'placeholder', value: ph });
     var text = squash(el.textContent);
-    if (text && text.length <= 60 && el.children.length === 0) out.push({ strategy: 'text', value: text });
-    if (el.id) out.push({ strategy: 'css', value: '#' + cssEscape(el.id) });
+    // A label wrapping its checkbox is still found by what it says.
+    if (text && text.length <= 60 && (el.children.length === 0 || el.tagName === 'LABEL')) out.push({ strategy: 'text', value: text });
+    if (stableId(el.id)) out.push({ strategy: 'css', value: '#' + cssEscape(el.id) });
+    // A form field's name is what the server reads, so it outlives label and layout changes.
+    var fieldName = el.getAttribute('name');
+    if (/^(INPUT|TEXTAREA|SELECT|BUTTON|IFRAME)$/.test(el.tagName) && stableId(fieldName))
+      out.push({ strategy: 'css', value: el.tagName.toLowerCase() + '[name="' + attrValue(fieldName) + '"]' });
+    // An iframe has no role or text; its title, or where it loads from, is what identifies it.
+    if (el.tagName === 'IFRAME') {
+      var title = squash(el.getAttribute('title'));
+      if (title) out.push({ strategy: 'css', value: 'iframe[title="' + attrValue(title) + '"]' });
+      var src = (el.getAttribute('src') || '').split(/[?#]/)[0];
+      if (src && src.length <= 200 && !looksVolatile(src)) out.push({ strategy: 'css', value: 'iframe[src^="' + attrValue(src) + '"]' });
+    }
 
     // Anything ambiguous on its own gets a version scoped to the container the tester would name,
     // and, failing that, its position. Both come before the brittle full CSS path.
@@ -158,20 +208,52 @@ export const LOCATOR_CORE = String.raw`
       } else {
         var all = matchesIn(c, document);
         var at = all.indexOf(el);
-        if (at !== -1) out.push({ strategy: c.strategy, value: c.value, name: c.name, attr: c.attr, nth: at });
+        if (at !== -1 && at <= 500) out.push({ strategy: c.strategy, value: c.value, name: c.name, attr: c.attr, nth: at });
       }
     }
+
+    // Its place in a list ("the first result"): offered for every item in a list, always marked as
+    // data-dependent, so it is only chosen when the tester's intent is about position.
+    var inList = listPosition(el, role);
+    if (inList) out.push(inList);
 
     out.push({ strategy: 'css', value: cssPath(el) });
     // The id rule and the path can land on the same selector; offer each way only once.
     var seen = {};
-    return out.filter(function (c) {
+    var unique = out.filter(function (c) {
       var key = c.strategy + '|' + c.value + '|' + (c.name || '') + '|' +
         (c.within ? c.within.strategy + c.within.value + (c.within.hasText || '') : '') + '|' + (c.nth === undefined ? '' : c.nth);
       if (seen[key]) return false;
       seen[key] = true;
+      c.stable = isStable(c);
       return true;
     });
+    // Stable ways first, each group keeping its preference order ("Add to cart" before "₹499").
+    return unique.filter(function (c) { return c.stable; }).concat(unique.filter(function (c) { return !c.stable; }));
+  }
+
+  var LIST_ITEM = 'li,[role=listitem],[role=row],tr,article,[role=article]';
+  var LIST = 'ul,ol,[role=list],table,[role=table],[role=grid],[role=feed],[role=listbox]';
+
+  /** This element's position among the same kind of element in its list, found through that list. */
+  function listPosition(el, role) {
+    var item = role && el.closest(LIST_ITEM);
+    var list = item && item.parentElement && item.parentElement.closest(LIST);
+    if (!list || list.querySelectorAll(LIST_ITEM).length < 2) return null;
+    var listLoc = null;
+    for (var i = 0; i < TEST_ID_ATTRS.length && !listLoc; i++) {
+      var tid = list.getAttribute(TEST_ID_ATTRS[i]);
+      if (tid) listLoc = { strategy: 'testid', value: tid, attr: TEST_ID_ATTRS[i] };
+    }
+    var listRole = roleOf(list) || (list.tagName === 'TABLE' ? 'table' : null);
+    if (!listLoc && listRole) {
+      var nm = accessibleName(list);
+      listLoc = { strategy: 'role', value: listRole, name: nm && nm.length <= 40 && list.children.length > 0 && nm !== squash(list.textContent) ? nm : undefined };
+    }
+    if (!listLoc || matchesIn(listLoc, document).length !== 1) return null;
+    var peers = matchesIn({ strategy: 'role', value: role }, list);
+    var at = peers.indexOf(el);
+    return at === -1 || at > 500 ? null : { strategy: 'role', value: role, within: listLoc, nth: at };
   }
 
   /** A short, readable CSS path: stops at the nearest id, and uses :nth-of-type only when needed. */
@@ -179,7 +261,7 @@ export const LOCATOR_CORE = String.raw`
     var parts = [];
     var node = el;
     while (node && node.nodeType === 1 && parts.length < 5) {
-      if (node.id) { parts.unshift('#' + cssEscape(node.id)); break; }
+      if (stableId(node.id)) { parts.unshift('#' + cssEscape(node.id)); break; }
       var sel = node.tagName.toLowerCase();
       var parent = node.parentElement;
       if (parent) {
@@ -192,20 +274,26 @@ export const LOCATOR_CORE = String.raw`
     return parts.join(' > ');
   }
 
+  /** getByRole leaves out what is hidden from people, so a hidden duplicate (a mobile menu) must not count. */
+  function rendered(e) {
+    if (e.closest('[aria-hidden="true"]') || !e.getClientRects().length) return false;
+    return getComputedStyle(e).visibility !== 'hidden';
+  }
+
   /** Every element a candidate matches, inside 'root' (the whole page by default). */
   function matchesIn(c, root) {
     var scope = root || document;
     try {
-      if (c.strategy === 'testid') return [].slice.call(scope.querySelectorAll('[' + c.attr + '="' + cssEscape(c.value) + '"]'));
+      if (c.strategy === 'testid') return [].slice.call(scope.querySelectorAll('[' + c.attr + '="' + attrValue(c.value) + '"]'));
       if (c.strategy === 'placeholder') return [].slice.call(scope.querySelectorAll('[placeholder="' + cssEscape(c.value) + '"]'));
       if (c.strategy === 'css') return [].slice.call(scope.querySelectorAll(c.value));
       var all = scope.querySelectorAll('*');
       var out = [];
       for (var i = 0; i < all.length; i++) {
         var e = all[i];
-        if (c.strategy === 'role' && roleOf(e) === c.value && (c.name === undefined || accessibleName(e) === c.name)) out.push(e);
+        if (c.strategy === 'role' && roleOf(e) === c.value && (c.name === undefined || accessibleName(e) === c.name) && rendered(e)) out.push(e);
         else if (c.strategy === 'label' && /^(INPUT|TEXTAREA|SELECT)$/.test(e.tagName) && labelOf(e) === c.value) out.push(e);
-        else if (c.strategy === 'text' && e.children.length === 0 && squash(e.textContent) === c.value) out.push(e);
+        else if (c.strategy === 'text' && (e.children.length === 0 || e.tagName === 'LABEL') && squash(e.textContent) === c.value) out.push(e);
       }
       return out;
     } catch (err) { return []; }
@@ -220,7 +308,8 @@ export const LOCATOR_CORE = String.raw`
     if (c.strategy === 'role') return 'getByRole(' + q(c.value) + (c.name ? ', { name: ' + q(c.name) + ', exact: true }' : '') + ')';
     if (c.strategy === 'label') return 'getByLabel(' + q(c.value) + ', { exact: true })';
     if (c.strategy === 'placeholder') return 'getByPlaceholder(' + q(c.value) + ', { exact: true })';
-    if (c.strategy === 'text') return 'getByText(' + q(c.value) + ')';
+    // Exact, as it is counted: getByText otherwise matches any element containing the text, any case.
+    if (c.strategy === 'text') return 'getByText(' + q(c.value) + ', { exact: true })';
     return 'locator(' + q(c.value) + ')';
   }
 
@@ -244,6 +333,32 @@ export const LOCATOR_CORE = String.raw`
     return kind && base.toLowerCase().indexOf(kind) === -1 ? base + ' ' + kind : base;
   }
 
+  /** Everything a picker pane shows about one element; the shape is PickedElement in browser.ts. */
+  function describeElement(el) {
+    var found = candidates(el);
+    return {
+      tag: el.tagName.toLowerCase(),
+      role: roleOf(el) || null,
+      text: squash(el.textContent).slice(0, 80),
+      xpath: xpathOf(el).slice(0, 2000),
+      suggestedName: suggestName(el, found).slice(0, 200),
+      page: (squash(document.title).slice(0, 60) || location.pathname).slice(0, 200),
+      url: location.href.slice(0, 2000),
+      locators: found.map(function (c) {
+        return {
+          strategy: c.strategy,
+          value: c.value,
+          name: c.name,
+          within: c.within ? { strategy: c.within.strategy, value: c.within.value, name: c.within.name, hasText: c.within.hasText } : undefined,
+          nth: c.nth,
+          code: 'page.' + playwrightCode(c),
+          stable: c.stable,
+          // A scoped locator is counted inside its container, and a positional one picks exactly one.
+          matches: c.within || c.nth !== undefined ? 1 : countMatches(c, null)
+        };
+      })
+    };
+  }
 
   /** An XPath for people who need one; Playwright locators above are preferred and far less brittle. */
   function xpathOf(el) {

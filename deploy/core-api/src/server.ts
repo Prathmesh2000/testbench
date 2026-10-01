@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { AiService } from '@tb/ai';
+import { startSuiteScheduler } from '@tb/apitest';
 import { auditConsumer } from '@tb/audit';
 import { JiraAccounts, startAttachmentWorker, startReconciler } from '@tb/defect';
 import { startRunPrepWorker } from '@tb/execution';
@@ -10,7 +11,9 @@ import {
   ObjectStorage,
   createDb,
   createTokenVerifier,
+  decryptSecret,
   discoverRemoteKeys,
+  encryptSecret,
   loadConfig,
   loadEnvFileIfPresent,
   startOutboxRelay,
@@ -80,11 +83,13 @@ const app = await buildApp({
   gatewayUrl: cfg.AGENT_GATEWAY_URL ?? null,
   collab: { url: cfg.COLLAB_URL, secret: cfg.COLLAB_SECRET ?? null },
   browser: { url: cfg.BROWSER_URL, secret: cfg.BROWSER_SECRET ?? null, allowPrivate: cfg.BROWSER_ALLOW_PRIVATE },
+  apiStudio: { secret: cfg.API_STUDIO_SECRET ?? null, allowPrivate: cfg.API_STUDIO_ALLOW_PRIVATE },
   calendarUrl: cfg.CALENDAR_URL ?? null,
   webUrl: cfg.WEB_URL,
   logLevel: cfg.LOG_LEVEL,
 });
 if (!cfg.JIRA_TOKEN_SECRET) app.log.warn('JIRA_TOKEN_SECRET is not set; nobody can connect Jira');
+if (!cfg.API_STUDIO_SECRET) app.log.warn('API_STUDIO_SECRET is not set; API Studio cannot store secret variables or cookies');
 if (!notify) app.log.warn('The notification service is not configured; notifications are not sent');
 app.log.info({ mode: cfg.AI_MODE, localModel: cfg.AI_LOCAL_MODEL }, 'AI provider layer ready');
 
@@ -93,6 +98,15 @@ await index.ensure();
 await ensurePercolator(index);
 const stopReconciler = startReconciler(db, jira, app.log, cfg.JIRA_RECONCILE_MINUTES * 60_000);
 const stopAttachments = startAttachmentWorker(db, storage, jira, app.log);
+// API Studio schedules and monitors: due suites start once a minute, each as its owner.
+const apiSecret = cfg.API_STUDIO_SECRET;
+const stopSuites = startSuiteScheduler({
+  db,
+  storage,
+  box: apiSecret ? { encrypt: (v) => encryptSecret(apiSecret, v), decrypt: (c) => decryptSecret(apiSecret, c) } : null,
+  cfg: { allowPrivate: cfg.API_STUDIO_ALLOW_PRIVATE },
+  log: app.log,
+});
 const stoppers = [
   startBulkWorker(db, app.log),
   startRunPrepWorker(db, app.log),
@@ -103,6 +117,7 @@ const stoppers = [
   ),
   async () => stopReconciler(),
   async () => stopAttachments(),
+  async () => stopSuites(),
 ];
 
 // Graceful shutdown: stop taking requests, let workers finish their current chunk, then close pools.

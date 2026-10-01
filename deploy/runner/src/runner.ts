@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { ObjectStorage, createDb, loadConfig, loadEnvFileIfPresent } from '@tb/platform';
+import { JsonCache, ObjectStorage, createDb, loadConfig, loadEnvFileIfPresent } from '@tb/platform';
 import { claimItem, runItem } from './worker';
 
 // Headless runner (testing-studio-plan §12). Locally one Node process polling the database queue; in
@@ -18,13 +18,16 @@ const storage = new ObjectStorage({
   bucket: cfg.S3_BUCKET,
 });
 
+// Live frames of running tests; a cache that is down only costs the live view, never a run.
+const cache = JsonCache.connect(cfg.VALKEY_URL, { warn: (obj, msg) => console.warn(msg, obj) });
+
 let active = 0;
 async function tick() {
   while (active < CONCURRENCY) {
     const claimed = await claimItem(db);
     if (!claimed) return;
     active++;
-    void runItem({ db, storage }, claimed)
+    void runItem({ db, storage, cache }, claimed)
       .catch((err) => console.error('run item failed', claimed.id, err))
       .finally(() => {
         active--;

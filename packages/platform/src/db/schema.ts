@@ -598,6 +598,8 @@ export interface StudioTestTable {
   data_set_id: string | null;
   current_version: Generated<number>;
   owner_id: string;
+  /** TestIntent; null when the test was not built from an intent. */
+  intent: Json<Record<string, unknown>> | null;
   created_at: Timestamp;
   updated_at: Timestamp;
 }
@@ -632,6 +634,30 @@ export interface StudioComponentTable {
   description: Generated<string>;
   inputs: string[];
   current_version: Generated<number>;
+  /** ComponentMeta. Written as a JSON string; optional on insert because the column defaults to {}. */
+  meta: ColumnType<Record<string, unknown>, string | undefined, string>;
+  updated_at: Timestamp;
+}
+
+/** A page the Test Browser reached (SitePage, less its id and times). */
+export interface SitePageTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  path: string;
+  body: ColumnType<Record<string, unknown>, string, string>;
+  visits: Generated<number>;
+  first_seen: Timestamp;
+  last_seen: Timestamp;
+}
+
+/** WorkflowPlan, one per workflow component. */
+export interface WorkflowPlanTable {
+  component_id: string;
+  org_id: string;
+  project_id: string;
+  body: ColumnType<Record<string, unknown>, string, string>;
+  updated_by: string;
   updated_at: Timestamp;
 }
 
@@ -705,6 +731,401 @@ export interface CodeFileVersionTable {
   created_at: Timestamp;
 }
 
+/** jsonb with a database default: written as a JSON string, optional on insert. */
+type JsonDefault<T> = ColumnType<T, string | undefined, string>;
+
+export interface ApiWorkspaceTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  name: string;
+  kind: Generated<string>;
+  owner_id: string;
+  /** StoredVariable[]: secret values are ciphertext. */
+  variables: JsonDefault<unknown[]>;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface ApiNodeTable {
+  id: Generated<string>;
+  org_id: string;
+  workspace_id: string;
+  parent_id: string | null;
+  kind: string;
+  name: string;
+  position: Generated<number>;
+  /** Collections and folders: { auth, variables }. Requests: ApiRequestDef. */
+  config: JsonDefault<Record<string, unknown>>;
+  updated_by: string;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface ApiVariationTable {
+  id: Generated<string>;
+  org_id: string;
+  request_id: string;
+  name: string;
+  position: Generated<number>;
+  overrides: JsonDefault<Record<string, unknown>>;
+  updated_by: string;
+  updated_at: Timestamp;
+}
+
+export interface ApiEnvironmentTable {
+  id: Generated<string>;
+  org_id: string;
+  workspace_id: string;
+  name: string;
+  position: Generated<number>;
+  variables: JsonDefault<unknown[]>;
+  production: Generated<boolean>;
+  updated_at: Timestamp;
+}
+
+export interface ApiCookieJarTable {
+  id: Generated<string>;
+  org_id: string;
+  user_id: string;
+  workspace_id: string;
+  environment_id: string | null;
+  cookies_enc: string;
+  updated_at: Timestamp;
+}
+
+export interface ApiSpecTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  name: string;
+  source_url: string | null;
+  current_version: Generated<number>;
+  created_by: string;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface ApiSpecVersionTable {
+  spec_id: string;
+  version: number;
+  org_id: string;
+  format: string;
+  title: string;
+  api_version: string;
+  hash: string;
+  storage_key: string;
+  size_bytes: number;
+  operations: Json<unknown[]>;
+  servers: ColumnType<string[], string[] | undefined, string[]>;
+  /** SpecDiff against the previous version; null for version 1. */
+  diff: ColumnType<Record<string, unknown> | null, string | null, string | null>;
+  created_by: string;
+  created_at: Timestamp;
+}
+
+export interface ApiHistoryTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  workspace_id: string;
+  user_id: string;
+  node_id: string | null;
+  method: string;
+  url: string;
+  status: number | null;
+  duration_ms: number;
+  request: Json<Record<string, unknown>>;
+  response: ColumnType<Record<string, unknown> | null, string | null, string | null>;
+  error: string | null;
+  created_at: Timestamp;
+}
+
+export interface ApiClientCertTable {
+  id: Generated<string>;
+  org_id: string;
+  workspace_id: string;
+  name: string;
+  host: string;
+  /** Encrypted JSON: { cert, key, passphrase, ca }. */
+  bundle_enc: string;
+  subject: string;
+  expires_at: NullableTimestamp;
+  created_by: string;
+  updated_at: Timestamp;
+}
+
+export interface ApiAuthProfileTable {
+  id: Generated<string>;
+  org_id: string;
+  workspace_id: string;
+  name: string;
+  login_node_id: string | null;
+  /** AuthProfileConfig. */
+  config: Json<Record<string, unknown>>;
+  updated_by: string;
+  updated_at: Timestamp;
+}
+
+export interface ApiDependencyLinkTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  from_key: string;
+  to_key: string;
+  param_in: string;
+  param_name: string;
+  field: string | null;
+  status: string;
+  decided_by: string;
+  decided_at: Timestamp;
+}
+
+export interface ApiWorkflowTable {
+  id: Generated<string>;
+  org_id: string;
+  workspace_id: string;
+  name: string;
+  description: Generated<string>;
+  current_version: Generated<number>;
+  updated_by: string;
+  updated_at: Timestamp;
+}
+
+export interface ApiWorkflowVersionTable {
+  workflow_id: string;
+  version: number;
+  org_id: string;
+  /** ApiWorkflowDef. */
+  def: Json<Record<string, unknown>>;
+  created_by: string;
+  created_at: Timestamp;
+}
+
+export interface ApiWorkflowRunTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  workflow_id: string;
+  version: number;
+  user_id: string;
+  environment_id: string | null;
+  mode: string;
+  status: string;
+  next_step: Generated<number>;
+  results: JsonDefault<unknown[]>;
+  state_enc: string | null;
+  error: string | null;
+  started_at: Timestamp;
+  updated_at: Timestamp;
+  finished_at: NullableTimestamp;
+}
+
+export interface ApiLintSettingTable {
+  org_id: string;
+  project_id: string;
+  rule: string;
+  enabled: boolean;
+  reason: Generated<string>;
+  updated_by: string;
+  updated_at: Timestamp;
+}
+
+export interface ApiEnrichmentAnswerTable {
+  id: Generated<string>;
+  org_id: string;
+  spec_id: string;
+  question_id: string;
+  kind: string;
+  status: string;
+  answer: ColumnType<Record<string, unknown> | null, string | null, string | null>;
+  patches: JsonDefault<unknown[]>;
+  source: string | null;
+  assigned_to: string | null;
+  answered_by: string | null;
+  answered_at: NullableTimestamp;
+  updated_at: Timestamp;
+}
+
+export interface ApiGeneratedTestTable {
+  id: Generated<string>;
+  org_id: string;
+  spec_id: string;
+  gen_id: string;
+  version: number;
+  operation: string;
+  kind: string;
+  name: string;
+  payload: Json<Record<string, unknown>>;
+  status: Generated<string>;
+  request_id: string | null;
+  variation_id: string | null;
+  decided_by: string | null;
+  updated_at: Timestamp;
+}
+
+export interface ApiSuiteTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  workspace_id: string;
+  name: string;
+  items: Json<unknown[]>;
+  settings: Json<Record<string, unknown>>;
+  schedule: Json<Record<string, unknown>>;
+  next_run_at: NullableTimestamp;
+  owner_id: string;
+  updated_by: string;
+  updated_at: Timestamp;
+}
+
+export interface ApiSuiteRunTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  suite_id: string;
+  trigger: string;
+  status: string;
+  environment_id: string | null;
+  totals: JsonDefault<Record<string, unknown>>;
+  error: string | null;
+  triggered_by: string | null;
+  started_at: Timestamp;
+  updated_at: Timestamp;
+  finished_at: NullableTimestamp;
+}
+
+export interface ApiSuiteResultTable {
+  id: Generated<string>;
+  org_id: string;
+  run_id: string;
+  position: number;
+  key: string;
+  group_name: string;
+  name: string;
+  row_index: number | null;
+  status: string;
+  flaky: Generated<boolean>;
+  attempts: Generated<number>;
+  http_status: number | null;
+  duration_ms: number;
+  message: Generated<string>;
+  history_id: string | null;
+  drift_issues: Generated<number>;
+  method: string | null;
+  operation: string | null;
+  created_at: Timestamp;
+}
+
+export interface ApiMockTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  spec_id: string;
+  token_hash: string;
+  token_enc: string;
+  enabled: Generated<boolean>;
+  config: JsonDefault<Record<string, unknown>>;
+  overrides: JsonDefault<Record<string, unknown>>;
+  owner_id: string;
+  updated_at: Timestamp;
+}
+
+export interface ApiTargetTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  host: string;
+  token: string;
+  status: Generated<string>;
+  method: string | null;
+  verified_at: NullableTimestamp;
+  verified_by: string | null;
+  created_by: string;
+  created_at: Timestamp;
+}
+
+export interface ApiFindingTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  spec_id: string;
+  fingerprint: string;
+  rule: string;
+  severity: string;
+  owasp: string;
+  operation: string | null;
+  title: string;
+  detail: string;
+  evidence: Json<Record<string, unknown>>;
+  history_id: string | null;
+  status: Generated<string>;
+  suppress_reason: string | null;
+  suppress_until: NullableTimestamp;
+  suppressed_by: string | null;
+  first_seen: Timestamp;
+  last_seen: Timestamp;
+}
+
+export interface ApiSecurityRunTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  spec_id: string;
+  user_id: string;
+  environment_id: string | null;
+  host: string;
+  checks: string[];
+  status: string;
+  requests: Generated<number>;
+  found: JsonDefault<unknown[]>;
+  notes: JsonDefault<unknown[]>;
+  override_by: string | null;
+  error: string | null;
+  started_at: Timestamp;
+  updated_at: Timestamp;
+  finished_at: NullableTimestamp;
+}
+
+export interface ApiLoadTestTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  workspace_id: string;
+  name: string;
+  body: Json<Record<string, unknown>>;
+  updated_by: string;
+  updated_at: Timestamp;
+}
+
+export interface ApiLoadRunTable {
+  id: Generated<string>;
+  org_id: string;
+  project_id: string;
+  load_test_id: string;
+  user_id: string;
+  host: string;
+  status: string;
+  metrics: JsonDefault<Record<string, unknown>>;
+  verdicts: JsonDefault<unknown[]>;
+  override_by: string | null;
+  error: string | null;
+  started_at: Timestamp;
+  updated_at: Timestamp;
+  finished_at: NullableTimestamp;
+}
+
+export interface ApiAuthSessionTable {
+  id: Generated<string>;
+  org_id: string;
+  user_id: string;
+  profile_id: string;
+  environment_id: string | null;
+  token_enc: string;
+  expires_at: NullableTimestamp;
+  created_at: Timestamp;
+}
+
 export interface Database {
   'iam.org': OrgTable;
   'iam.app_user': AppUserTable;
@@ -757,8 +1178,37 @@ export interface Database {
   'studio.page_element': PageElementTable;
   'studio.component': StudioComponentTable;
   'studio.component_version': StudioComponentVersionTable;
+  'studio.site_page': SitePageTable;
+  'studio.workflow_plan': WorkflowPlanTable;
   'studio.auto_run': AutoRunTable;
   'studio.auto_run_item': AutoRunItemTable;
   'studio.code_file': CodeFileTable;
   'studio.code_file_version': CodeFileVersionTable;
+  'apitest.workspace': ApiWorkspaceTable;
+  'apitest.node': ApiNodeTable;
+  'apitest.variation': ApiVariationTable;
+  'apitest.environment': ApiEnvironmentTable;
+  'apitest.cookie_jar': ApiCookieJarTable;
+  'apitest.spec': ApiSpecTable;
+  'apitest.spec_version': ApiSpecVersionTable;
+  'apitest.history': ApiHistoryTable;
+  'apitest.client_cert': ApiClientCertTable;
+  'apitest.auth_profile': ApiAuthProfileTable;
+  'apitest.auth_session': ApiAuthSessionTable;
+  'apitest.dependency_link': ApiDependencyLinkTable;
+  'apitest.workflow': ApiWorkflowTable;
+  'apitest.workflow_version': ApiWorkflowVersionTable;
+  'apitest.workflow_run': ApiWorkflowRunTable;
+  'apitest.lint_setting': ApiLintSettingTable;
+  'apitest.enrichment_answer': ApiEnrichmentAnswerTable;
+  'apitest.generated_test': ApiGeneratedTestTable;
+  'apitest.suite': ApiSuiteTable;
+  'apitest.mock': ApiMockTable;
+  'apitest.target': ApiTargetTable;
+  'apitest.finding': ApiFindingTable;
+  'apitest.security_run': ApiSecurityRunTable;
+  'apitest.load_test': ApiLoadTestTable;
+  'apitest.load_run': ApiLoadRunTable;
+  'apitest.suite_run': ApiSuiteRunTable;
+  'apitest.suite_result': ApiSuiteResultTable;
 }

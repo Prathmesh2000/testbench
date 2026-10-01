@@ -12,12 +12,19 @@ export const AI_PROVIDER_LABELS: Record<AiProvider, string> = {
   local: 'Local Ollama',
 };
 
-export const AI_TASKS = ['generate_cases', 'edge_cases', 'extract_requirements'] as const;
+export const AI_TASKS = ['generate_cases', 'edge_cases', 'extract_requirements', 'intent_test', 'scenario_chat', 'ui_review', 'api_enrich', 'api_explain', 'api_plan', 'api_ask'] as const;
 export type AiTask = (typeof AI_TASKS)[number];
 export const AI_TASK_LABELS: Record<AiTask, string> = {
   generate_cases: 'Generate cases from a requirement',
   edge_cases: 'Suggest edge cases',
   extract_requirements: 'Extract requirements from a PRD',
+  intent_test: 'Build a test from an intent and a recording',
+  scenario_chat: 'Discuss what to test in a workflow',
+  ui_review: 'Review a page’s UI, accessibility and performance',
+  api_enrich: 'Draft answers to questions about an API spec',
+  api_explain: 'Explain API routes and what to test',
+  api_plan: 'Pick the API calls that meet a requirement',
+  api_ask: 'Answer questions about a project’s APIs',
 };
 
 /** any: members may use every provider · allowed: only the listed ones · local_only: nothing leaves the network · off: AI disabled. */

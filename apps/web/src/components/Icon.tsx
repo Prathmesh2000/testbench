@@ -18,6 +18,9 @@ const PATHS = {
   moon: 'M13.5 9.5A6 6 0 1 1 6.5 2.5a4.5 4.5 0 0 0 7 7z',
   rows: 'M2 3.5h12M2 8h12M2 12.5h12',
   plus: 'M8 3v10M3 8h10',
+  chevUp: 'M4 10l4-4 4 4',
+  expand: 'M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9',
+  collapse: 'M13 3 9 7M9 3.5V7h3.5M3 13l4-4M3.5 9H7v3.5',
   chevDown: 'M4 6l4 4 4-4',
   chevRight: 'M6 4l4 4-4 4',
   chevLeft: 'M10 4 6 8l4 4',
@@ -49,6 +52,9 @@ const PATHS = {
   camera: 'M2 5h2.5L6 3h4l1.5 2H14v8H2zM8 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
   back: 'M10 3 5 8l5 5',
   forward: 'M6 3l5 5-5 5',
+  inspect: 'M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10M6.5 6.5l5 2-2 1-1 2z',
+  sparkle: 'M8 1.5 9.3 6.7 14.5 8 9.3 9.3 8 14.5 6.7 9.3 1.5 8 6.7 6.7zM13 1.5v3M11.5 3h3',
+  layers: 'M8 2 14.5 5.5 8 9 1.5 5.5zM1.5 8.5 8 12l6.5-3.5M1.5 11 8 14.5l6.5-3.5',
 } as const;
 
 export type IconName = keyof typeof PATHS;

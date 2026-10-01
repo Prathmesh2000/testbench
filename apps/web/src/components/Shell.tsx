@@ -28,6 +28,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     { href: '/data', label: 'Test data', icon: 'rows' },
     { href: '/runs', label: 'Runs', icon: 'runs' },
     { href: '/automation', label: 'Automation', icon: 'play' },
+    { href: '/api', label: 'API Studio', icon: 'plug' },
     { href: '/defects', label: 'Defects', icon: 'bug' },
   ] },
   { group: 'Explore', items: [

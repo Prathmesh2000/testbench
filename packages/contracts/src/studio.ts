@@ -36,6 +36,24 @@ export type Locator = z.infer<typeof Locator>;
 export const Target = z.union([z.object({ elementId: z.uuid() }), z.object({ locator: Locator })]);
 export type Target = z.infer<typeof Target>;
 
+/** A form field's own rules, read from the page, so test data can be generated to fit (and to break) them. */
+export const FieldRules = z.object({
+  type: z.string().max(30).default('text'),
+  name: z.string().max(100).default(''),
+  autocomplete: z.string().max(60).default(''),
+  inputMode: z.string().max(20).default(''),
+  required: z.boolean().default(false),
+  /** -1 when the field sets none. */
+  minLength: z.number().int().min(-1).max(1_000_000).default(-1),
+  maxLength: z.number().int().min(-1).max(1_000_000).default(-1),
+  pattern: z.string().max(300).default(''),
+  min: z.string().max(40).default(''),
+  max: z.string().max(40).default(''),
+  /** A select's option labels. */
+  options: z.array(z.string().max(200)).max(50).default([]),
+});
+export type FieldRules = z.infer<typeof FieldRules>;
+
 // ---------- assertions ----------
 
 export const ASSERTIONS = [
@@ -51,12 +69,32 @@ export const ASSERTIONS = [
   'url_contains',
   'title_contains',
   'status_equals',
+  /**
+   * A field's inline error from the browser's own validation ("Please fill out this field."), which
+   * is not text on the page. `expected` is the message; empty means "the field is refused at all".
+   */
+  'validation_message',
+  /**
+   * What the app keeps in the browser: `key` is the cookie's name or the storage key; with `expected`
+   * its value must equal it, without it the key must just be there.
+   */
+  'cookie',
+  'local_storage',
+  'session_storage',
+  /**
+   * The page called an API during the test: `key` is "METHOD /path" (":id" matches any one segment),
+   * `expected` the status it must have answered with, if any.
+   */
+  'api_called',
 ] as const;
 export type AssertionKind = (typeof ASSERTIONS)[number];
+export const STORAGE_ASSERTIONS: readonly AssertionKind[] = ['cookie', 'local_storage', 'session_storage'];
 
 /** Page-level and API checks need no element; the rest check the step's target or their own. */
 export const PAGE_ASSERTIONS: readonly AssertionKind[] = ['url_contains', 'title_contains'];
 export const API_ASSERTIONS: readonly AssertionKind[] = ['status_equals'];
+/** Checks on the browser, not an element: what it stores and what the page called. */
+export const BROWSER_ASSERTIONS: readonly AssertionKind[] = [...STORAGE_ASSERTIONS, 'api_called'];
 
 export const Assertion = z.object({
   kind: z.enum(ASSERTIONS),
@@ -64,6 +102,8 @@ export const Assertion = z.object({
   expected: z.string().max(2000).optional(),
   /** Another element to check; defaults to the step's own target. */
   target: Target.optional(),
+  /** For browser checks: the cookie or storage key, or "METHOD /path" for api_called. */
+  key: z.string().trim().max(300).optional(),
   /** Soft: record the failure and carry on. Hard (default): stop the test. */
   soft: z.boolean().default(false),
 });
@@ -80,6 +120,8 @@ export const STEP_ACTIONS = [
   'uncheck',
   'hover',
   'press',
+  /** Reads what an element shows into {vars.<value>} for later steps (a generated order number). */
+  'store',
   'verify',
   'use_component',
   'api_request',
@@ -120,6 +162,17 @@ export type AutoStep = z.infer<typeof AutoStep>;
 export const TEST_KINDS = ['ui', 'api', 'journey'] as const;
 export type TestKind = (typeof TEST_KINDS)[number];
 
+/** What a tester means a test to prove, in their own words; the build works from it and it stays on the test. */
+export const TestIntent = z.object({
+  /** The state the app must be in first, e.g. "signed in as a buyer with an empty cart". */
+  prerequisites: z.string().trim().max(2000).default(''),
+  /** What is being tested. */
+  intent: z.string().trim().min(3).max(2000),
+  /** What must be true at the end for the test to pass. */
+  goal: z.string().trim().min(3).max(2000),
+});
+export type TestIntent = z.infer<typeof TestIntent>;
+
 export const SaveTestBody = z.object({
   title: z.string().trim().min(3).max(200),
   kind: z.enum(TEST_KINDS).default('ui'),
@@ -128,6 +181,7 @@ export const SaveTestBody = z.object({
   /** Names of secrets the steps may use as {secret.name}; values live in the environment's secret store. */
   secrets: z.array(z.string().regex(/^[a-zA-Z_]\w{0,40}$/)).max(30).default([]),
   steps: z.array(AutoStep).min(1).max(200),
+  intent: TestIntent.nullable().default(null),
 });
 export type SaveTestBody = z.infer<typeof SaveTestBody>;
 
@@ -152,6 +206,7 @@ export interface StudioTest {
   secrets: string[];
   steps: AutoStep[];
   warnings: StepIssue[];
+  intent: TestIntent | null;
   updatedAt: string;
 }
 
@@ -172,6 +227,64 @@ export interface PageElement {
   updatedAt: string;
 }
 
+/** What an input holds, so test data can be generated for it and filled in correctly. */
+export const FIELD_KINDS = ['text', 'email', 'phone', 'number', 'password', 'otp', 'date', 'pincode', 'name', 'url', 'search', 'select', 'other'] as const;
+export type FieldKind = (typeof FIELD_KINDS)[number];
+
+/** The meta layer around a reusable segment: what it is for, what it needs and what it leaves behind. */
+export const ComponentMeta = z.object({
+  purpose: z.string().trim().max(500).default(''),
+  /** The state the app is in afterwards, e.g. "signed in as a buyer"; how a later test knows it fits. */
+  leaves: z.string().trim().max(300).default(''),
+  preconditions: z.string().trim().max(500).default(''),
+  tags: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
+  inputKinds: z.record(z.string(), z.enum(FIELD_KINDS)).default({}),
+  /** Recorded as a test's prerequisite, split out of a recording, recorded as a workflow, or made by hand. */
+  origin: z.enum(['prerequisite', 'segment', 'workflow', 'manual']).default('manual'),
+  // ---- workflows: a recorded journey saved to be reused and tested with many scenarios ----
+  /** What the workflow does, in the tester's words. */
+  intent: z.string().trim().max(2000).default(''),
+  /** The workflow that must run first (sign in, say). */
+  prerequisiteId: z.uuid().nullable().default(null),
+  /** Steps after the submit (open what was created), saved as their own component; null when none. */
+  continuationId: z.uuid().nullable().default(null),
+  /** The pages it goes through, as recorded: what a scenario can fill in, press and expect to see. */
+  pages: z.array(z.lazy(() => PageInfo)).max(20).default([]),
+  /** What the recording typed, per input, as each scenario's starting values (never a secret). */
+  defaults: z.record(z.string(), z.string().max(4_000)).default({}),
+  /** The rules of each input, so scenarios can be made to fit and break them. */
+  inputRules: z.record(z.string(), z.lazy(() => FieldRules)).default({}),
+  /** Secret inputs (passwords, one-time codes): filled from secrets, never from data. */
+  secretInputs: z.array(z.string()).max(40).default([]),
+  /** The site it was recorded on. */
+  baseUrl: z.string().max(500).default(''),
+  /** The submit's name, as the scenario chat refers to it. */
+  submitLabel: z.string().max(200).default(''),
+  /** Deleted from the library; tests that already run it keep their pinned version. */
+  archived: z.boolean().default(false),
+  /** The APIs the page called while it was recorded, after which action, ids made ":id". */
+  apis: z
+    .array(z.object({ method: z.string().max(10), path: z.string().max(500), status: z.number().int().nullable(), after: z.string().max(200) }))
+    .max(60)
+    .default([]),
+});
+export type ComponentMeta = z.infer<typeof ComponentMeta>;
+
+/** One page of a workflow, as the recording saw it. */
+export const PageInfo = z.object({
+  /** The stable part of its address, e.g. /home/projects/. */
+  path: z.string().max(500),
+  title: z.string().max(300),
+  headings: z.array(z.string().max(300)).max(20),
+  fields: z
+    .array(z.object({ key: z.string().max(60), label: z.string().max(200), kind: z.enum(FIELD_KINDS), rules: FieldRules }))
+    .max(40),
+  actions: z.array(z.object({ label: z.string().max(200), locator: Locator })).max(40),
+  /** Messages, alerts, dialogs and headings that appeared, with the action they followed. */
+  messages: z.array(z.object({ kind: z.string().max(20), text: z.string().max(300), after: z.string().max(200) })).max(40),
+});
+export type PageInfo = z.infer<typeof PageInfo>;
+
 export const SaveComponentBody = z.object({
   name: z.string().trim().min(2).max(120),
   description: z.string().trim().max(1000).default(''),
@@ -179,6 +292,8 @@ export const SaveComponentBody = z.object({
   inputs: z.array(z.string().regex(/^[a-zA-Z_]\w{0,40}$/)).max(20).default([]),
   steps: z.array(AutoStep).min(1).max(100),
   changelog: z.string().trim().max(500).default(''),
+  // prefault, not default: the inner defaults must apply when meta is left out.
+  meta: ComponentMeta.prefault({}),
 });
 
 export interface StudioComponent {
@@ -188,6 +303,7 @@ export interface StudioComponent {
   inputs: string[];
   version: number;
   steps: AutoStep[];
+  meta: ComponentMeta;
   updatedAt: string;
 }
 
@@ -262,6 +378,16 @@ export interface AutoRun {
   counts: Record<AutoItemStatus, number> & { total: number; flaky: number };
   createdAt: string;
   finishedAt: string | null;
+}
+
+/** What a running test item shows right now; there is none before it starts or once it is done. */
+export interface LiveFrame {
+  /** JPEG, base64; null for a code spec, which shows its progress but not its page. */
+  frame: string | null;
+  /** The step it is on, as "2. Sign in › 2.3 click". */
+  step: string | null;
+  url: string;
+  at: string;
 }
 
 export interface AutoRunDetail extends AutoRun {

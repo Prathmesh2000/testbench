@@ -62,6 +62,14 @@ const Config = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  // API Studio: encrypts secret variables and saved cookie jars at rest (KMS in AWS). Without it, plain
+  // variables still work and saving a secret says why it cannot.
+  API_STUDIO_SECRET: z.string().min(32).optional(),
+  /** Local development only: lets API Studio send requests to localhost and private addresses. */
+  API_STUDIO_ALLOW_PRIVATE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   /** Calendar invites for meetings; locally the provider sandbox records them. */
   CALENDAR_URL: z.url().optional(),
   /** The agent gateway (MCP + Slack), shown in the admin console when set. */

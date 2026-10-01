@@ -10,6 +10,7 @@ import { usePrefs, useSession, useToast } from '@/components/providers';
 import { api, ApiError, get } from '@/lib/api';
 import { ago, bytes } from '@/lib/format';
 import { SitePane } from './SitePane';
+import { Splitter, useStoredSize } from './Splitter';
 import s from './ide.module.css';
 
 // ponytail: Monaco loads from jsDelivr at the version matching our installed types; bundle it
@@ -89,6 +90,7 @@ function buildTree(paths: string[]): Folder[] {
  */
 export function Ide({ header, initial }: { header: React.ReactNode; initial?: string | null }) {
   const [siteOpen, setSiteOpen] = useState(false);
+  const [siteWidth, setSiteWidth] = useStoredSize('tb.ide.siteWidth', 520);
   const { project, can } = useSession();
   const { theme } = usePrefs();
   const { notify } = useToast();
@@ -247,17 +249,19 @@ export function Ide({ header, initial }: { header: React.ReactNode; initial?: st
   const paths = useMemo(() => Object.keys(saved).sort(), [saved]);
 
   /** Drops a locator picked in the site pane straight into the editor at the cursor. */
-  const insertAtCursor = (code: string) => {
+  /** False when there is no open file to write into, so the caller can say so. */
+  const insertAtCursor = (code: string): boolean => {
     const editor = editorRef.current;
-    if (!editor || !active) return;
+    if (!editor || !active) return false;
     const pos = editor.getPosition();
-    if (!pos) return;
+    if (!pos) return false;
     editor.executeEdits('tb-picker', [{ range: { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column }, text: code }]);
     editor.focus();
+    return true;
   };
 
   return (
-    <div className={s.ide} style={siteOpen ? { gridTemplateColumns: '240px minmax(0, 1fr) minmax(320px, 34%)' } : undefined}>
+    <div className={s.ide} style={siteOpen ? { gridTemplateColumns: `240px minmax(0, 1fr) 6px ${siteWidth}px` } : undefined}>
       <aside className={s.explorer}>
         {header}
         <Explorer paths={paths} active={active} editable={editable} dirty={dirty} onOpen={openFile} onCreate={createFile} onRename={renameFile} onDelete={deleteFile} onStarter={starter} />
@@ -298,6 +302,17 @@ export function Ide({ header, initial }: { header: React.ReactNode; initial?: st
         </div>
         <RunPanel active={active} specs={paths.filter(isSpec)} problems={problems} onJump={jump} beforeRun={saveAll} />
       </div>
+      {siteOpen && (
+        <Splitter
+          direction="columns"
+          size={siteWidth}
+          min={320}
+          // The editor keeps at least 360px beside the explorer.
+          max={typeof window === 'undefined' ? 1200 : window.innerWidth - 240 - 360}
+          onResize={setSiteWidth}
+          label="Resize the site pane"
+        />
+      )}
       {siteOpen && <SitePane onInsert={insertAtCursor} />}
     </div>
   );

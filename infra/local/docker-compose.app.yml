@@ -1,0 +1,72 @@
+# Runs the Node services and Next.js in a container instead of on the host (Node 24 + Playwright Chromium).
+# Layer it on the infra stack:
+#   docker compose -f infra/local/docker-compose.yml -f infra/local/docker-compose.app.yml up -d --build app
+# .env keeps its localhost URLs: the browser needs them (OIDC issuer, presigned S3 URLs, the Jira site), so
+# socat inside the container forwards each localhost infra port to its compose service.
+services:
+  app:
+    image: testbench-app:24
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM node:24
+        ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+        RUN apt-get update && apt-get install -y --no-install-recommends socat && rm -rf /var/lib/apt/lists/* \
+         && npx -y playwright@1.63.0 install --with-deps chromium chromium-headless-shell \
+         && chmod -R a+rx /ms-playwright && corepack enable \
+         && mkdir -p /home/app && chown 1000:1000 /home/app
+    user: "${TB_UID:-1000}:${TB_GID:-1000}"
+    working_dir: /repo
+    volumes:
+      - ../..:/repo
+      - apphome:/home/app
+    environment:
+      HOME: /home/app
+      # Bind mounts from WSL into Docker Desktop do not deliver inotify events reliably.
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      pnpm_config_store_dir: /home/app/pnpm-store
+      npm_config_store_dir: /home/app/pnpm-store
+    ports:
+      - "3000:3000"
+      - "4000:4000"
+      - "4100:4100"
+      - "4200:4200"
+      - "4300:4300"
+      - "4400:4400"
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+      s3: { condition: service_healthy }
+      opensearch: { condition: service_healthy }
+      jira: { condition: service_healthy }
+      providers: { condition: service_healthy }
+      # No health checks on these; waiting for them to start at least stops the most common race.
+      dynamodb: { condition: service_started }
+      sqs: { condition: service_started }
+      mailpit: { condition: service_started }
+    command:
+      - sh
+      - -c
+      - |
+        fwd() { socat TCP-LISTEN:$$1,bind=127.0.0.1,fork,reuseaddr TCP:$$2 & }
+        fwd 5433 postgres:5432
+        fwd 6379 valkey:6379
+        fwd 8080 keycloak:8080
+        fwd 9000 s3:8333
+        fwd 9200 opensearch:9200
+        fwd 8090 jira:8090
+        fwd 8000 dynamodb:8000
+        fwd 9324 sqs:9324
+        fwd 1025 mailpit:1025
+        fwd 8025 mailpit:8025
+        fwd 8091 providers:8091
+        fwd 11434 host.docker.internal:11434
+        # turbo's strict env mode drops PLAYWRIGHT_BROWSERS_PATH, so Playwright looks in the default cache.
+        mkdir -p $$HOME/.cache && ln -sfn /ms-playwright $$HOME/.cache/ms-playwright
+        CI=true pnpm install --frozen-lockfile && exec pnpm dev
+
+volumes:
+  apphome:

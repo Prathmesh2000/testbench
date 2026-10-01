@@ -1,0 +1,25 @@
+/* The journey builder: workflows in order, each with its scenario, then the test case it automates. */
+.wrap { display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 32px; max-width: 900px; font-size: 13px; }
+.head { display: flex; flex-direction: column; gap: 4px; }
+.head h2 { margin: 0; font-size: 17px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field > span { font-weight: 600; font-size: 12px; }
+.parts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
+.part { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); position: relative; }
+.part + .part { margin-top: 18px; }
+.part + .part::before { content: '↓'; position: absolute; top: -17px; left: 22px; color: var(--text3); }
+.partHead { display: flex; gap: 8px; align-items: center; }
+.no { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 12px; }
+.scenarios { display: flex; flex-direction: column; gap: 3px; padding-left: 30px; }
+.scenario { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; }
+.outcome { font-weight: 700; width: 12px; text-align: center; }
+.ok { color: var(--passed); }
+.bad { color: var(--failed); }
+.warn { color: var(--blocked); font-size: 11.5px; }
+.add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.case { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+.case legend { font-weight: 600; font-size: 12px; padding: 0 4px; }
+.caseSearch { display: flex; flex-direction: column; gap: 4px; padding-left: 22px; max-height: 220px; overflow: auto; }
+.result { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--passed); border-radius: 8px; }
+.testLink { border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; padding: 2px 0; }
+.testLink:hover { color: var(--accent); }

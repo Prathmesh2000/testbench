@@ -13,6 +13,7 @@
   "dependencies": {
     "@tb/ai": "workspace:*",
     "@tb/analytics": "workspace:*",
+    "@tb/apitest": "workspace:*",
     "@tb/audit": "workspace:*",
     "@tb/collab": "workspace:*",
     "@tb/contracts": "workspace:*",
@@ -35,7 +36,9 @@
   "devDependencies": {
     "@tb/runner": "workspace:*",
     "@types/pg": "^8.15.0",
+    "@types/ws": "^8.18.1",
     "jose": "^6.2.12",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.2",
+    "ws": "^8.22.0"
   }
 }

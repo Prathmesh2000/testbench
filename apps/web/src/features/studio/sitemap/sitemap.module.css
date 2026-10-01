@@ -1,0 +1,43 @@
+/* Site map: the graph on the left, details of what is picked on the right. */
+.screen { display: grid; grid-template-rows: auto auto minmax(0, 1fr); height: 100%; min-height: 0; }
+.top { display: flex; align-items: center; border-bottom: 1px solid var(--border); background: var(--panel); }
+.bar { display: flex; gap: 12px; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--soft); background: var(--panel); font-size: 12px; flex-wrap: wrap; }
+.body { display: grid; grid-template-columns: minmax(0, 1fr) 380px; min-height: 0; }
+.canvas { position: relative; min-height: 0; background: var(--bg); }
+.side { border-left: 1px solid var(--border); background: var(--panel); overflow: auto; min-height: 0; }
+.hint { display: flex; flex-direction: column; gap: 8px; padding: 16px; font-size: 12.5px; color: var(--text2); line-height: 1.5; }
+.minimap { background: var(--panel) !important; }
+
+.node { border-radius: 8px; padding: 8px 10px; width: 210px; display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; background: var(--panel); color: var(--text); border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(0, 0, 0, .15); }
+.page { border-left: 4px solid #3b82f6; }
+.workflow { border-left: 4px solid #8b5cf6; }
+.prerequisite { border-left: 4px solid var(--text3); }
+.api { width: auto; max-width: 240px; padding: 4px 8px; border-left: 4px solid var(--text3); }
+.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dim { opacity: .3; }
+.kind { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--text3); }
+.title { font-size: 12.5px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.path { font-size: 10.5px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta { font-size: 10.5px; color: var(--text2); }
+.okText { color: var(--passed); }
+.badText { color: var(--failed); }
+.flow :global(.react-flow__edge-path) { stroke: #8b5cf6; stroke-width: 1.5; }
+.pre :global(.react-flow__edge-path) { stroke: var(--text3); stroke-dasharray: 5 4; }
+.link :global(.react-flow__edge-path) { stroke: #3b82f6; stroke-dasharray: 2 4; opacity: .7; }
+.apiEdge :global(.react-flow__edge-path) { stroke: var(--text3); stroke-dasharray: 1 3; }
+
+.details { display: flex; flex-direction: column; gap: 8px; padding: 14px; font-size: 12.5px; }
+.details code { font-family: var(--font-mono), monospace; font-size: 11px; word-break: break-all; }
+.section { border-top: 1px solid var(--soft); padding-top: 6px; }
+.section > summary { cursor: pointer; font-weight: 600; font-size: 12px; padding: 2px 0; }
+.sectionBody { display: flex; flex-direction: column; gap: 4px; padding: 6px 0 2px; }
+.action { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.action > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.action > button { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.role { font-size: 9.5px; text-transform: uppercase; color: var(--text3); width: 52px; flex: none; }
+.linkBtn { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 12px; padding: 0; cursor: pointer; text-align: left; }
+.linkBtn:hover { text-decoration: underline; }
+.validation { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 6px; padding: 4px 0; border-bottom: 1px dashed var(--soft); }
+.status { font-size: 10px; color: var(--text3); }
+
+@media (max-width: 900px) { .body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 60vh auto; } .side { border-left: 0; border-top: 1px solid var(--border); } }

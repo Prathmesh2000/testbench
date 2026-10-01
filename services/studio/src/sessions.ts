@@ -5,6 +5,8 @@ import { AppError, badRequest, notFound, signTicket, type Tx } from '@tb/platfor
 export const SESSION_MAX_S = 4 * 3600;
 /** Live sessions open at once per organisation (testing-studio-plan §16). */
 export const MAX_OPEN_SESSIONS = 30;
+/** One tester's sessions kept open when they start another: a few panes or tabs at once is plenty. */
+export const KEEP_PER_USER = 4;
 
 export interface BrowserConfig {
   url: string;
@@ -41,6 +43,18 @@ export async function startSession(
       .executeTakeFirst();
     if (!item) throw badRequest('That run item is not in this project.');
   }
+  // A tab closed without ending its session (a crash, a lost network) leaves it open until it expires.
+  // Starting another ends that tester's oldest ones past the few anyone uses at once.
+  const mine = await trx
+    .selectFrom('studio.live_session')
+    .select('id')
+    .where('user_id', '=', caller.userId)
+    .where('ended_at', 'is', null)
+    .where('expires_at', '>', new Date())
+    .orderBy('started_at', 'desc')
+    .execute();
+  const stale = mine.slice(KEEP_PER_USER - 1).map((r) => r.id);
+  if (stale.length) await trx.updateTable('studio.live_session').set({ ended_at: new Date() }).where('id', 'in', stale).execute();
   const open = await trx
     .selectFrom('studio.live_session')
     .select((eb) => eb.fn.countAll<string>().as('n'))

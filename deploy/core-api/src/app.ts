@@ -1,5 +1,6 @@
 import { aiRoutes, type AiService } from '@tb/ai';
 import { analyticsRoutes } from '@tb/analytics';
+import { apiStudioRoutes, MOCK_ROUTE, type ApiStudioConfig } from '@tb/apitest';
 import { collabRoutes, type CollabOptions } from '@tb/collab';
 import { defectRoutes, type JiraAccounts } from '@tb/defect';
 import { docsRoutes } from '@tb/docs';
@@ -31,6 +32,7 @@ export interface AppOptions extends ServiceDeps {
   collab: CollabOptions;
   /** Test Browser server and the secret its session tickets are signed with. */
   browser: BrowserConfig;
+  apiStudio: ApiStudioConfig;
   calendarUrl: string | null;
   webUrl: string;
   logLevel?: string;
@@ -77,7 +79,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
         verify: opts.verify,
         // The locator picker runs on the tester's own site with no session; it carries a signed,
         // short-lived ticket that the handler verifies instead.
-        publicPaths: ['/api/v1/studio/picker/captured'],
+        publicPaths: ['/api/v1/studio/picker/captured', MOCK_ROUTE],
       });
       await api.register(iamRoutes, deps);
       await api.register(adminRoutes, { ...deps, keycloak: opts.keycloak });
@@ -92,7 +94,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
       await api.register(aiRoutes, { ...deps, ai: opts.ai });
       await api.register(collabRoutes, { ...deps, collab: opts.collab });
       await api.register(meetingRoutes, { ...deps, calendarUrl: opts.calendarUrl });
-      await api.register(studioRoutes, { ...deps, browser: opts.browser, webUrl: opts.webUrl });
+      await api.register(studioRoutes, { ...deps, browser: opts.browser, webUrl: opts.webUrl, ai: opts.ai });
+      await api.register(apiStudioRoutes, { ...deps, apiStudio: opts.apiStudio, ai: opts.ai, jira: opts.jira, webUrl: opts.webUrl });
       if (opts.notify) await api.register(notifyRoutes, { ...deps, client: opts.notify });
     },
     { prefix: '/api/v1' },

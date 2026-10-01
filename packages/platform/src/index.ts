@@ -12,3 +12,5 @@ export * from './relay';
 export * from './secrets';
 export * from './mask';
 export * from './collab-ticket';
+export * from './browser-profile';
+export * from './net-guard';

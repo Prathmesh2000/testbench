@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import type { BrowserClaims } from '@tb/contracts';
-import { loadEnvFileIfPresent, verifyTicket } from '@tb/platform';
+import { BROWSER_ARGS, loadEnvFileIfPresent, verifyTicket } from '@tb/platform';
 import { chromium } from 'playwright';
 import { WebSocketServer } from 'ws';
 import { z } from 'zod';
@@ -32,7 +32,9 @@ const cfg = z
   })
   .parse(process.env);
 
-const browser = await chromium.launch({ headless: cfg.BROWSER_HEADLESS });
+// Full Chromium, not the default headless shell: bot protection on many public sites (justdial.com,
+// for one) refuses the shell's fingerprint outright, and testers need those sites to behave as in Chrome.
+const browser = await chromium.launch({ channel: 'chromium', headless: cfg.BROWSER_HEADLESS, args: BROWSER_ARGS });
 const sessions = new Map<string, LiveSession>();
 
 const server = createServer((req, res) => {

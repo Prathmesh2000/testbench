@@ -117,7 +117,8 @@ export async function startRun(
   return (await listRuns(trx, projectId, run.id))[0]!;
 }
 
-export async function listRuns(trx: Tx, projectId: string, runId?: string): Promise<AutoRun[]> {
+/** The newest runs; with `testId`, only the runs that ran that test. */
+export async function listRuns(trx: Tx, projectId: string, runId?: string, testId?: string): Promise<AutoRun[]> {
   let q = trx
     .selectFrom('studio.auto_run')
     .selectAll()
@@ -125,6 +126,7 @@ export async function listRuns(trx: Tx, projectId: string, runId?: string): Prom
     .orderBy('key_no', 'desc')
     .limit(100);
   if (runId) q = q.where('id', '=', runId);
+  if (testId) q = q.where('id', 'in', trx.selectFrom('studio.auto_run_item').select('run_id').where('test_id', '=', testId));
   const runs = await q.execute();
   if (!runs.length) return [];
   const counts = await trx

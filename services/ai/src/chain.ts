@@ -15,7 +15,8 @@ export interface AiSettings {
 
 /**
  * Platform defaults per task (HLD §2.3), used when a tenant hasn't overridden the task. Extraction
- * needs careful reading, so it goes to Claude; edge cases benefit from a second model's view.
+ * and intent builds need careful reading, so they go to Claude; edge cases benefit from a second
+ * model's view.
  */
 export function defaultTaskConfig(task: AiTask, s: AiSettings): TaskConfig {
   const m = (provider: CloudProvider): ModelRef => ({ provider, model: s.models[provider] });
@@ -26,6 +27,14 @@ export function defaultTaskConfig(task: AiTask, s: AiSettings): TaskConfig {
       return { ...m('anthropic'), fallback: [m('openai'), m('xai')] };
     case 'edge_cases':
       return { ...m('xai'), fallback: [m('anthropic')] };
+    case 'intent_test':
+    case 'scenario_chat':
+    case 'ui_review':
+    case 'api_enrich':
+    case 'api_explain':
+    case 'api_plan':
+    case 'api_ask':
+      return { ...m('anthropic'), fallback: [m('openai')] };
   }
 }
 

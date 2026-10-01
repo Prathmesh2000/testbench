@@ -30,16 +30,130 @@
 }
 
 /* Site pane: the page under test beside the editor, with its locator inspector under it. */
-.site { display: grid; grid-template-rows: 34px auto minmax(0, 1fr) auto; border-left: 1px solid var(--border); background: var(--panel); min-width: 0; min-height: 0; }
+/* A column, not a grid: the setup box is optional, and grid rows would shift when it is absent. */
+.site { display: flex; flex-direction: column; background: var(--panel); min-width: 0; min-height: 0; }
+.site > .siteBar { flex: 0 0 34px; }
 .siteBar { display: flex; align-items: center; gap: 6px; padding: 0 8px; border-bottom: 1px solid var(--soft); }
 .setup { padding: 8px 10px; border-bottom: 1px solid var(--soft); display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; background: var(--bg); }
 .setup code { font-family: var(--font-mono), monospace; font-size: 10.5px; word-break: break-all; background: var(--panel); border: 1px solid var(--border); border-radius: 3px; padding: 3px 5px; }
-.frameWrap { position: relative; min-height: 0; background: #fff; }
+/* Clipped: when space is short its contents must never paint over the panel below. */
+.frameWrap { position: relative; flex: 1; min-height: 0; background: #fff; overflow: hidden; }
 .frame { width: 100%; height: 100%; border: 0; display: block; }
 .waiting { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px 10px; font-size: 11.5px; background: var(--panel); border-top: 1px solid var(--border); color: var(--text2); }
-.inspector { border-top: 1px solid var(--border); padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; max-height: 40%; overflow: auto; font-size: 12px; }
+/* Live mode: the Test Browser's stream, scaled to the pane's width so pointer positions map 1:1. */
+.live { display: grid; grid-template-rows: 28px minmax(0, 1fr); height: 100%; background: var(--panel); }
+.liveBar { display: flex; align-items: center; gap: 4px; padding: 0 6px; border-bottom: 1px solid var(--soft); font-size: 11px; }
+.screenWrap { position: relative; overflow: hidden; min-height: 0; outline: none; background: var(--bg); }
+.screenWrap:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+/* Whole page visible at any pane size; LiveBrowser maps pointer positions through the same fit. */
+.screen { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; }
+.mode { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.mode button { border: 0; background: transparent; color: var(--text2); font-size: 11px; padding: 3px 7px; cursor: pointer; }
+.mode button[aria-selected='true'] { background: var(--accent-soft); color: var(--text); }
+.inspector { padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; flex: 1; min-height: 0; overflow: auto; font-size: 12px; }
 .cand { display: flex; gap: 6px; align-items: baseline; width: 100%; text-align: left; padding: 3px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); cursor: pointer; }
 .cand.on { border-color: var(--accent); background: var(--accent-soft); }
 .cand code { font-family: var(--font-mono), monospace; font-size: 10.5px; word-break: break-all; }
 .uniq { font-size: 10px; color: var(--passed); white-space: nowrap; }
 .dup { font-size: 10px; color: var(--blocked); white-space: nowrap; }
+.recDot { width: 7px; height: 7px; border-radius: 50%; background: var(--failed); display: inline-block; }
+.recScript { margin: 0; flex: 1; min-height: 60px; overflow: auto; font-family: var(--font-mono), monospace; font-size: 10.5px; white-space: pre-wrap; word-break: break-all; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px; }
+.tabs { display: flex; gap: 2px; min-width: 0; flex: 1; overflow: hidden; }
+.tab { display: flex; align-items: center; min-width: 0; max-width: 160px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); }
+.tab.on { border-color: var(--accent); background: var(--accent-soft); }
+.tab > button:first-child { border: 0; background: transparent; color: var(--text); font-size: 11px; padding: 2px 6px; cursor: pointer; min-width: 0; }
+.tabX { border: 0; background: transparent; color: var(--text3); padding: 0 4px; cursor: pointer; display: flex; }
+.recOn { font-size: 10.5px; color: var(--failed); white-space: nowrap; }
+/* Focus target for typing into the Test Browser; see LiveBrowser. Invisible but focusable. */
+.keySink { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; resize: none; border: 0; padding: 0; pointer-events: none; }
+.screenWrap:focus-within { box-shadow: inset 0 0 0 2px var(--accent); }
+.tabNew { border: 1px solid transparent; background: transparent; color: var(--text2); border-radius: 4px; padding: 2px 5px; cursor: pointer; display: flex; align-items: center; flex: none; }
+.tabNew:hover { border-color: var(--border); color: var(--text); }
+
+/* Draggable dividers (Splitter.tsx): a thin line with a wider grab area. */
+.splitCols, .splitRows { background: var(--border); position: relative; flex: none; outline: none; touch-action: none; }
+.splitCols { width: 6px; cursor: col-resize; background: linear-gradient(to right, transparent 2px, var(--border) 2px, var(--border) 3px, transparent 3px); }
+.splitRows { height: 6px; cursor: row-resize; background: linear-gradient(to bottom, transparent 2px, var(--border) 2px, var(--border) 3px, transparent 3px); }
+.splitCols:hover, .splitCols:focus-visible, .splitRows:hover, .splitRows:focus-visible { background: var(--accent); }
+.bottom { display: flex; flex-direction: column; flex: none; min-height: 0; }
+.bottomTabs { display: flex; gap: 2px; padding: 4px 8px 0; border-bottom: 1px solid var(--soft); }
+.bottomTabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text2); font-size: 11.5px; padding: 3px 8px; cursor: pointer; }
+.bottomTabs button[aria-selected='true'] { color: var(--text); border-bottom-color: var(--accent); }
+.network { display: flex; flex-direction: column; gap: 6px; padding: 6px 10px; min-height: 0; flex: 1; font-size: 11.5px; }
+.netList { overflow: auto; min-height: 60px; flex: 1; border: 1px solid var(--border); border-radius: 4px; }
+.netRow { display: grid; grid-template-columns: 58px 50px 46px minmax(0, 1fr) 44px 62px; gap: 6px; width: 100%; padding: 3px 6px; border: 0; border-bottom: 1px solid var(--soft); background: transparent; color: var(--text); text-align: left; font-family: var(--font-mono), monospace; font-size: 10.5px; cursor: pointer; }
+.netRow:hover { background: var(--bg); }
+/* Sticky header for both the network and storage tables. Scoped to .netList so it outranks the row
+   styles (which set a transparent background) whatever order they come in. */
+.netList .netHead { position: sticky; top: 0; z-index: 1; background: var(--panel); color: var(--text3); cursor: default; font-family: inherit; box-shadow: 0 1px 0 var(--border); }
+.netList .netHead:hover { background: var(--panel); }
+.netBad { color: var(--failed); }
+.netDetail { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; background: var(--bg); border-bottom: 1px solid var(--soft); }
+.netDetail code { font-family: var(--font-mono), monospace; font-size: 10.5px; word-break: break-all; }
+
+.netSort { border: 0; background: transparent; color: inherit; font: inherit; text-align: left; padding: 0; cursor: pointer; white-space: nowrap; }
+.netSort:hover { color: var(--text); }
+/* Expanded: the whole Site pane over the app, same live session underneath. */
+.siteExpanded { position: fixed; inset: 16px; z-index: 1000; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 48px rgba(0, 0, 0, .45); overflow: hidden; }
+.backdrop { position: fixed; inset: 0; z-index: 999; background: rgba(0, 0, 0, .55); }
+.kinds { display: flex; gap: 3px; flex-wrap: wrap; }
+.kinds button { border: 1px solid var(--border); border-radius: 10px; background: transparent; color: var(--text2); font-size: 10.5px; padding: 1px 8px; cursor: pointer; }
+.kinds button[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.kinds button:disabled { opacity: .45; cursor: default; }
+.netOn { background: var(--accent-soft) !important; }
+/* Request details and storage values: under the list, taking the space the list gives up. */
+.detail { display: flex; flex-direction: column; min-height: 0; flex: 1.2; border: 1px solid var(--border); border-radius: 4px; }
+.detailBar { display: flex; align-items: center; gap: 2px; padding: 2px 6px; border-bottom: 1px solid var(--soft); }
+.detailBar button[role='tab'] { border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text2); font-size: 11px; padding: 3px 7px; cursor: pointer; }
+.detailBar button[aria-selected='true'] { color: var(--text); border-bottom-color: var(--accent); }
+.detailBody { overflow: auto; min-height: 0; flex: 1; padding: 6px 8px; display: flex; flex-direction: column; gap: 8px; }
+.pairs { display: flex; flex-direction: column; gap: 2px; font-size: 11px; }
+.pair { display: grid; grid-template-columns: minmax(90px, 32%) minmax(0, 1fr); gap: 8px; padding: 1px 0; }
+.pairKey { color: var(--text2); font-family: var(--font-mono), monospace; word-break: break-all; }
+.pairVal { font-family: var(--font-mono), monospace; word-break: break-all; white-space: pre-wrap; }
+.code { margin: 0; font-family: var(--font-mono), monospace; font-size: 10.5px; white-space: pre-wrap; word-break: break-all; }
+.timingRow { display: grid; grid-template-columns: 130px minmax(0, 1fr) 60px; gap: 8px; align-items: center; }
+.timingBar { height: 8px; background: var(--soft); border-radius: 2px; overflow: hidden; }
+.timingBar > span { display: block; height: 100%; background: var(--accent); }
+.storeRow { display: grid; grid-template-columns: minmax(80px, 30%) minmax(0, 1fr); gap: 6px; width: 100%; padding: 3px 6px; border: 0; border-bottom: 1px solid var(--soft); background: transparent; color: var(--text); text-align: left; font-family: var(--font-mono), monospace; font-size: 10.5px; cursor: pointer; }
+.storeRow.storeCookie { grid-template-columns: minmax(70px, 18%) minmax(0, 1fr) minmax(70px, 16%) 110px 110px; }
+.storeRow:hover { background: var(--bg); }
+.bottom { overflow: hidden; }
+.bottomAnim { transition: height .22s ease; }
+@media (prefers-reduced-motion: reduce) { .bottomAnim { transition: none; } }
+.bottomShut .bottomTabs { border-bottom-color: transparent; }
+.bottomTabs { align-items: center; flex: none; min-height: 31px; box-sizing: border-box; border-top: 1px solid var(--border); }
+.collapse { margin-left: 4px; }
+/* The large view uses the whole window; the page inside is laid out to fill it (LiveBrowser `fill`). */
+.siteExpanded { inset: 8px; }
+.siteExpanded .frameWrap { background: var(--bg); }
+/* Build panel (IntentBuilder.tsx) */
+.builder { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; overflow: auto; min-height: 0; flex: 1; font-size: 12px; }
+.field { display: flex; flex-direction: column; gap: 3px; }
+.field > span { font-weight: 600; font-size: 11.5px; }
+.field em { font-style: normal; font-weight: 400; margin-left: 4px; }
+.field textarea { resize: vertical; min-height: 34px; font: inherit; }
+.choices { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; padding-left: 2px; }
+.choices label { display: flex; gap: 6px; align-items: baseline; }
+.note { display: flex; gap: 6px; align-items: baseline; font-size: 11px; color: var(--text2); background: var(--bg); border: 1px solid var(--soft); border-radius: 4px; padding: 4px 6px; }
+.segment { display: grid; grid-template-columns: 90px minmax(0, 1fr) minmax(0, 1.4fr); gap: 6px; align-items: center; }
+.segment > span:last-child { grid-column: 2 / -1; }
+.segRole { font-size: 10.5px; color: var(--text3); }
+.checkGroup { display: flex; flex-direction: column; gap: 2px; padding-left: 4px; }
+.check { display: flex; gap: 6px; align-items: center; font-size: 11.5px; }
+.aiBadge { font-size: 9.5px; padding: 0 5px; border-radius: 8px; border: 1px solid var(--border); color: var(--text2); white-space: nowrap; }
+.aiOn { border-color: var(--accent); color: var(--accent); }
+.hint { font-size: 11px; color: var(--blocked); }
+/* The build's questions, before review (IntentBuilder). */
+.questions { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent-soft); }
+.question { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.question legend { font-weight: 600; font-size: 12px; padding: 0; margin-bottom: 2px; }
+/* The site with a guide beside it (the Workflows screen); without one the pane sits in its parent's grid. */
+.unguided { display: contents; }
+.guided { display: grid; grid-template-rows: minmax(0, 1fr); height: 100%; min-height: 0; }
+.guide { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--panel); }
+@media (max-width: 900px) {
+  .guided { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(320px, 1fr) auto; overflow: auto; }
+  .guided > [role='separator'] { display: none; }
+}
+.siteHidden { visibility: hidden; overflow: hidden; min-width: 0; }

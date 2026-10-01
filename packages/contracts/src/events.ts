@@ -42,6 +42,13 @@ export const EVENT_TYPES = [
   'meeting.scheduled',
   'action_item.converted',
   'studio.test.saved',
+  'studio.test.archived',
   'studio.component.versioned',
+  'apitest.suite.finished',
+  'apitest.monitor.failed',
+  'apitest.spec.versioned',
+  'apitest.security.run',
+  'apitest.load.run',
+  'apitest.target.verified',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];

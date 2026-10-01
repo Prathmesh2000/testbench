@@ -35,7 +35,7 @@ const base = () => `/projects/${h.projectId}/studio`;
 async function drain(runId: string) {
   for (let i = 0; i < 60; i++) {
     const claimed = await claimItem(h.appDb);
-    if (claimed) await runItem({ db: h.appDb, storage: h.storage }, claimed);
+    if (claimed) await runItem({ db: h.appDb, storage: h.storage, cache: null }, claimed);
     else await new Promise((r) => setTimeout(r, 2_000));
     const run = await call<AutoRunDetail>(h, h.users.lead, 'GET', `${base()}/runs/${runId}`);
     if (run.body.status !== 'queued' && run.body.status !== 'running') return run.body;
@@ -193,7 +193,7 @@ describe('Testing Studio', () => {
     const res = await call<{ path: string }>(h, h.users.tester, 'POST', `${base()}/tests/${good.id}/eject`);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     const file = await call<CodeFile>(h, h.users.tester, 'GET', `${base()}/code/file?path=${res.body.path}`);
-    expect(file.body.content).toContain("import { expect, test, type Page } from '@playwright/test';");
+    expect(file.body.content).toContain("import { expect, test, type Locator, type Page } from '@playwright/test';");
     const after = await call<StudioTest>(h, h.users.tester, 'GET', `${base()}/tests/${good.id}`);
     expect(after.body.status).toBe('archived');
   });

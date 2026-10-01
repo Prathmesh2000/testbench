@@ -1,5 +1,6 @@
 import {
   API_ASSERTIONS,
+  BROWSER_ASSERTIONS,
   CHANGING_ACTIONS,
   PAGE_ASSERTIONS,
   type AssertionKind,
@@ -10,7 +11,7 @@ import {
 /** {data.x} {secret.x} {env.x} {vars.x}: the only placeholders steps may use. */
 export const REF = /\{(data|secret|env|vars)\.([a-zA-Z_]\w*)\}/g;
 
-const NEEDS_TARGET: AutoStep['action'][] = ['click', 'type', 'select', 'check', 'uncheck', 'hover'];
+const NEEDS_TARGET: AutoStep['action'][] = ['click', 'type', 'select', 'check', 'uncheck', 'hover', 'store'];
 const NEEDS_VALUE: AutoStep['action'][] = ['open', 'type', 'select', 'press'];
 const NEEDS_EXPECTED: AssertionKind[] = [
   'text_equals',
@@ -33,11 +34,21 @@ export interface ValidationContext {
   insideComponent?: boolean;
 }
 
+/** The text of a locator that may hold placeholders: its value, name and container's. */
+function locatorTexts(t: AutoStep['target']): (string | undefined)[] {
+  if (!t || !('locator' in t)) return [];
+  const l = t.locator;
+  return [l.strategy === 'css' ? undefined : l.value, l.name, l.within?.value, l.within?.name, l.within?.hasText];
+}
+
 /** Every placeholder a step uses, wherever it appears. */
 function refsOf(step: AutoStep): { ns: string; name: string }[] {
   const texts = [
+    ...locatorTexts(step.target),
+    ...step.assertions.flatMap((a) => locatorTexts(a.target)),
     step.value,
     ...step.assertions.map((a) => a.expected),
+    ...step.assertions.map((a) => a.key),
     step.request?.url,
     step.request?.body,
     ...Object.values(step.request?.headers ?? {}),
@@ -66,6 +77,11 @@ export function validateSteps(steps: AutoStep[], ctx: ValidationContext): StepIs
     if (NEEDS_VALUE.includes(step.action) && !step.value)
       add(i, 'error', 'missing_value', step.action === 'open' ? 'Say which address to open.' : `A "${step.action}" step needs a value.`);
     if (step.action === 'api_request' && !step.request) add(i, 'error', 'missing_request', 'Describe the API request to send.');
+    if (step.action === 'store') {
+      if (!step.value || !/^[a-zA-Z_]\w{0,40}$/.test(step.value))
+        add(i, 'error', 'store_name', 'Name the variable to store into: letters, digits and _, starting with a letter.');
+      else extracted.add(step.value);
+    }
     if (step.action === 'use_component') {
       if (ctx.insideComponent) add(i, 'error', 'nested_component', 'A component cannot use another component.');
       else if (!step.component) add(i, 'error', 'missing_component', 'Pick the component to use.');
@@ -92,7 +108,11 @@ export function validateSteps(steps: AutoStep[], ctx: ValidationContext): StepIs
     }
 
     for (const a of step.assertions) {
-      const needsElement = !PAGE_ASSERTIONS.includes(a.kind) && !API_ASSERTIONS.includes(a.kind);
+      const needsElement = !PAGE_ASSERTIONS.includes(a.kind) && !API_ASSERTIONS.includes(a.kind) && !BROWSER_ASSERTIONS.includes(a.kind);
+      if (BROWSER_ASSERTIONS.includes(a.kind) && !a.key?.trim())
+        add(i, 'error', 'assertion_key', a.kind === 'api_called' ? 'Say which API: "POST /api/projects".' : `Say which ${a.kind === 'cookie' ? 'cookie' : 'storage key'} to check.`);
+      if (a.kind === 'api_called' && a.key?.trim() && !/^[A-Za-z]+\s+\/\S*$/.test(a.key.trim()))
+        add(i, 'error', 'assertion_key', 'Write the API as a method and a path: "POST /api/projects".');
       if (needsElement && !a.target && !step.target)
         add(i, 'error', 'assertion_target', `The "${a.kind}" check needs an element.`);
       if (API_ASSERTIONS.includes(a.kind) && step.action !== 'api_request')
@@ -116,7 +136,7 @@ export function validateSteps(steps: AutoStep[], ctx: ValidationContext): StepIs
       } else if (ref.ns === 'secret' && !ctx.secrets.includes(ref.name)) {
         add(i, 'error', 'unknown_secret', `Declare the secret "${ref.name}" on the test before using it.`);
       } else if (ref.ns === 'vars' && !extracted.has(ref.name)) {
-        add(i, 'error', 'unknown_var', `{vars.${ref.name}} is not saved by an earlier API step.`);
+        add(i, 'error', 'unknown_var', `{vars.${ref.name}} is not saved by an earlier step (an API request or a stored value).`);
       }
     }
     for (const e of step.request?.extract ?? []) extracted.add(e.name);

@@ -379,6 +379,8 @@ flowchart LR
 
 API tests run on the same runner using Playwright's request API. No browser, so they're cheap.
 
+The full API Studio plan (client, spec library, enrichment, workflows, suites, reports) is in [api-testing-plan.md](api-testing-plan.md). This section is the short version.
+
 ### 8.1 Finding the APIs (no Swagger needed)
 
 | Source | Notes |
